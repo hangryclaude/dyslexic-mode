@@ -1,0 +1,1 @@
+Do not remove the retry loop unless the timeout is not set. It is not uncommon for the loop to hide a hang, so you should not leave it unless you are certain that no caller depends on it, and the timeout default is not zero.

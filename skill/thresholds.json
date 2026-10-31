@@ -1,0 +1,194 @@
+{
+  "version": 1,
+  "evidence_note": "Most limits are style-guide defaults, not trial results. Each 'why' points to a section of references/research.md. Angus's feedback overrides.",
+  "sentence_words": {
+    "soft": 15,
+    "hard": 25,
+    "why": "research.md section 2: sentence length has weak direct evidence. Soft 15 is a style default for working-memory load (section 1). Hard 25 matches Dyslexia Scotland."
+  },
+  "clauses_per_sentence": {
+    "soft": 2,
+    "hard": 3,
+    "why": "research.md section 1: small phonological working memory; section 2: relative clauses are unsettled, so split anyway."
+  },
+  "paragraph_lines": {
+    "soft": 3,
+    "hard": 5,
+    "why": "research.md section 3: paragraph spacing is the layout lever the AI holds; crowding evidence is moderate in children, weak in adults. Hard 5 matches Dyslexia Scotland."
+  },
+  "paragraph_sentences": {
+    "soft": 3,
+    "hard": 4,
+    "why": "research.md section 3: one idea per short paragraph."
+  },
+  "line_chars": {
+    "soft": 70,
+    "hard": 80,
+    "why": "research.md section 3: WCAG 1.4.8 says 80 characters or fewer. 60-70 is single-source guide direction."
+  },
+  "long_word": {
+    "letters_soft": 9,
+    "letters_hard": 13,
+    "syllables_soft": 3,
+    "syllables_hard": 4,
+    "why": "research.md section 1: long, rare words cost the most (strong). Section 2: short and frequent words help (weak-moderate). Exact cut points are a judgement call.",
+    "words_per_sentence_soft": 2,
+    "words_per_sentence_hard": 3
+  },
+  "passive_voice": {
+    "max_per_reply": 1,
+    "why": "research.md section 1: errors rise on passive and implausible sentences (weak-moderate). Active voice is a cheap default."
+  },
+  "negation": {
+    "max_per_sentence": 1,
+    "forbid_double_negative": true,
+    "why": "research.md section 2: BDA says no double negatives. Study evidence is weak and not dyslexia-specific."
+  },
+  "list_items": {
+    "soft": 7,
+    "hard": 10,
+    "why": "research.md section 1: many similar items add multi-item cost (weak). Short lists are a heuristic."
+  },
+  "forbid": {
+    "italics": true,
+    "underline": true,
+    "all_caps_words_min_letters": 3,
+    "all_caps_allow": [
+      "API",
+      "CLI",
+      "URL",
+      "JSON",
+      "HTML",
+      "CSS",
+      "SQL",
+      "TTS",
+      "PR",
+      "UI",
+      "ID",
+      "OK"
+    ],
+    "decorative_emoji": true,
+    "box_drawing": true,
+    "why": "research.md section 3: italics read worse (moderate-weak). Underline and caps are guide advice (weak) but free to follow. Quiet pages: weak."
+  },
+  "answer_position": {
+    "max_line": 1,
+    "why": "research.md section 1: eye movement is laborious (moderate); fatigue evidence is thin (weak). Front-load so the reader can stop."
+  },
+  "heading_after_lines": {
+    "value": 10,
+    "why": "research.md section 3: real headings aid navigation (weak-moderate, BDA)."
+  },
+  "code_block_lines": {
+    "soft": 15,
+    "hard": 30,
+    "why": "research.md section 4: dyslexic programmers gaze at code differently (weak). Short blocks, one concern each."
+  },
+  "code_line_chars": {
+    "soft": 70,
+    "hard": 80,
+    "why": "research.md section 3: 80-character guidance applies to unbroken code lines the client cannot wrap."
+  },
+  "hash_chars": {
+    "max": 7,
+    "why": "research.md section 4: hashes are hard to track (weak, background)."
+  },
+  "table_columns": {
+    "soft": 3,
+    "hard": 4,
+    "why": "research.md section 3: avoid wide tables that wrap badly (moderate)."
+  },
+  "abbreviation_first_use": {
+    "spell_out": true,
+    "why": "research.md section 2: BDA says expand abbreviations on first use (weak-moderate)."
+  },
+  "look_alike_pairs": {
+    "pairs": [
+      [
+        "was",
+        "saw"
+      ],
+      [
+        "form",
+        "from"
+      ],
+      [
+        "trail",
+        "trial"
+      ],
+      [
+        "there",
+        "their"
+      ],
+      [
+        "affect",
+        "effect"
+      ],
+      [
+        "quiet",
+        "quite"
+      ],
+      [
+        "angle",
+        "angel"
+      ],
+      [
+        "causal",
+        "casual"
+      ],
+      [
+        "desert",
+        "dessert"
+      ],
+      [
+        "loose",
+        "lose"
+      ]
+    ],
+    "rule": "warn when both words of a pair sit in one sentence",
+    "why": "research.md section 5: swap evidence is preliminary (weak). Cheap courtesy only."
+  },
+  "word_swaps": {
+    "use_instead": {
+      "utilise": "use",
+      "utilize": "use",
+      "leverage": "use",
+      "remediate": "fix",
+      "commence": "start",
+      "terminate": "end",
+      "subsequently": "then",
+      "approximately": "about",
+      "additionally": "also",
+      "furthermore": "also",
+      "facilitate": "help",
+      "demonstrate": "show",
+      "implement": "build",
+      "functionality": "feature",
+      "methodology": "method"
+    },
+    "why": "research.md section 2: short common words help (weak-moderate). Rewrite the whole sentence; never patch single words (moderate)."
+  },
+  "bold_per_reply": {
+    "soft": 1,
+    "hard": 1,
+    "why": "research.md section 3: bold keeps letter shapes, italics read worse (moderate-weak). One bold phrase per reply. Whole-sentence bold dilutes the cue."
+  },
+  "jargon": {
+    "words": [
+      "idempotent",
+      "idempotency",
+      "lockfile",
+      "monorepo",
+      "memoize",
+      "memoization",
+      "polyfill",
+      "transpile",
+      "mutex",
+      "denormalize",
+      "serialize",
+      "deserialize"
+    ],
+    "why": "research.md section 2: BDA says explain jargon on first use (weak-moderate). Small list; the human pass finds the rest."
+  },
+  "note_copy": "This file is the one reread.mjs reads. The copy in ~/dev/dyslexic-reread is the research copy and can drift."
+}

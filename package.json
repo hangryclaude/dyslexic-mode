@@ -1,0 +1,13 @@
+{
+  "name": "dyslexic-mode",
+  "version": "0.1.0",
+  "description": "A terminal chat with Claude that re-reads every reply the way a dyslexic reader would",
+  "type": "module",
+  "bin": { "dyslexic-mode": "bin/dyslexic-mode.mjs" },
+  "scripts": {
+    "start": "node bin/dyslexic-mode.mjs",
+    "test": "node --test test/ skill/scripts/"
+  },
+  "engines": { "node": ">=20" },
+  "license": "MIT"
+}
