@@ -11,7 +11,9 @@ export const DEFAULT_TIMEOUT = 300_000;
 const WORK = fileURLToPath(new URL('./.work/', import.meta.url));
 const bin = name => process.env[`DYSLEXIC_${name.toUpperCase()}_BIN`] || name;
 
-// Every call starts in the same empty folder, so no CLI finds an AGENTS.md or CLAUDE.md on the way up.
+// Every call starts in the same empty folder. A CLI that looks for AGENTS.md or CLAUDE.md on the way up
+// to the repo root finds none, and each backend's own switches below stop it reading the user-level ones
+// (checked with a planted CLAUDE.md and AGENTS.md: none of the three reached the model).
 function emptyDir() {
   const dir = `${WORK}empty`;
   mkdirSync(dir, { recursive: true });
