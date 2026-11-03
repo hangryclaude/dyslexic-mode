@@ -193,6 +193,8 @@ test('small pieces: model names, the config, error sentences, event frames and t
   const step = (input, output) => ({ input, output, reasoning: 1, cache: { read: 2, write: 3 } });
   assert.deepEqual(opencodeUsage([step(10, 4), step(20, 6)]), { input: 15 + 25, output: 5 + 7, cached: 4, contextUsed: 25 + 7 });
   assert.deepEqual(opencodeUsage([]), unknownUsage());
+  // A model endpoint that reports no tokens gives zeros, which are unknown, not a count.
+  assert.deepEqual(opencodeUsage([{ input: 0, output: 0, reasoning: 0, cache: { read: 0, write: 0 } }]), unknownUsage());
   assert.deepEqual(claudeUsage({ usage: { input_tokens: 5, output_tokens: 7, cache_read_input_tokens: 100, cache_creation_input_tokens: 20 }, modelUsage: { 'claude-x': { contextWindow: 200000 } } }), { input: 125, output: 7, cached: 100, contextUsed: 132, contextWindow: 200000 });
   assert.deepEqual(claudeUsage({ result: 'no usage here' }), unknownUsage());
 });
