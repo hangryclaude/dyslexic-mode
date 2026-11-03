@@ -3,6 +3,7 @@
 //   node bench/run.mjs --models claude:haiku,claude:opus --conds base,careful,dyslexic \
 //     --families walk,dice --per 8 --seed 1 --out bench/results/run1.jsonl --conc claude=6,opencode=6,grok=3
 // Stop it any time and start it again with the same arguments: finished jobs are skipped.
+// --scale 3 makes walk, dice, arith and letters three times as long, for a model that already gets most standard items right.
 import { appendFileSync, existsSync, mkdirSync, readFileSync, realpathSync } from 'node:fs';
 import { dirname } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
@@ -125,7 +126,7 @@ async function main() {
     options: {
       models: { type: 'string' }, conds: { type: 'string' }, families: { type: 'string' }, per: { type: 'string' },
       seed: { type: 'string' }, out: { type: 'string' }, conc: { type: 'string' }, timeout: { type: 'string' },
-      style: { type: 'string', multiple: true }, dry: { type: 'boolean' },
+      style: { type: 'string', multiple: true }, dry: { type: 'boolean' }, scale: { type: 'string' },
     },
   });
   const fail = msg => { console.error(msg); process.exit(2); };
@@ -154,7 +155,8 @@ async function main() {
   if (badFamily.length) fail(`unknown family ${badFamily.join(', ')}. Available: ${FAMILIES.join(', ')}`);
 
   const seed = Number(v.seed ?? 1), per = Number(v.per ?? 8);
-  const items = makeItems({ seed, perFamily: per, families });
+  const scale = Number(v.scale ?? 1);
+  const items = makeItems({ seed, perFamily: per, families, scale });
   const models = list(v.models) ?? ['claude:haiku'];
   for (const m of models) backendOf(m);
   const conds = Object.fromEntries(names.map(n => [n, available[n]]));
@@ -162,7 +164,7 @@ async function main() {
 
   if (v.dry) {
     console.log(`${models.length} models x ${names.length} conditions x ${items.length} items = ${models.length * names.length * items.length} jobs`);
-    console.log(`models: ${models.join(', ')}\nconditions: ${names.join(', ')}\nfamilies: ${families.join(', ')} (${per} each, seed ${seed})`);
+    console.log(`models: ${models.join(', ')}\nconditions: ${names.join(', ')}\nfamilies: ${families.join(', ')} (${per} each, seed ${seed}${scale > 1 ? `, scale ${scale}` : ''})`);
     return;
   }
   const res = await runBench({ models, conds, items, out, conc: parseConc(v.conc), seed, timeoutMs: v.timeout ? Number(v.timeout) * 1000 : undefined });

@@ -17,7 +17,10 @@ const tmp = t => {
   t.after(() => rmSync(dir, { recursive: true, force: true }));
   return dir;
 };
-const itemsOf = (family, n = 40, seed = 5) => makeItems({ seed, perFamily: n, families: [family] });
+const itemsOf = (family, n = 40, seed = 5, scale = 1) => makeItems({ seed, perFamily: n, families: [family], scale });
+const SCALES = [1, 2, 4];
+// A scaled id carries x and the scale after the seed: walk-5x2-3. A standard one does not: walk-5-3.
+const scaleOf = item => Number(item.id.match(/-\d+x(\d+)-\d+$/)?.[1] ?? 1);
 const body = prompt => prompt.split('\n');
 const numbered = prompt => body(prompt).map(l => l.match(/^(\d+)\. (.*)$/)).filter(Boolean).map(m => m[2]);
 
@@ -40,6 +43,36 @@ test('items are deterministic, ids are unique, and asking for more never changes
     else assert.equal(typeof item.answer, 'string');
   }
   assert.throws(() => makeItems({ families: ['nope'] }), /unknown family/);
+});
+
+test('standard items are pinned, and a larger scale is a separate, longer set', () => {
+  // The pilot results in bench/results were made from these. A change to a generator that moves
+  // any of them would quietly make every old results file stale, so it fails here first.
+  const first = Object.fromEntries(makeItems({ seed: 1, perFamily: 1 }).map(i => [i.family, i.answer]));
+  assert.deepEqual(first, { walk: '-4,-3,south', dice: 'top=3, north=2', pattern: '58, 29', arith: '10', letters: '6', trick: '1', uses: null });
+  assert.deepEqual(makeItems({ seed: 1, perFamily: 4 }), makeItems({ seed: 1, perFamily: 4, scale: 1 }));
+
+  const standard = makeItems({ seed: 1, perFamily: 5 });
+  for (const scale of [2, 3, 8]) {
+    const big = makeItems({ seed: 1, perFamily: 5, scale });
+    assert.deepEqual(big, makeItems({ seed: 1, perFamily: 5, scale }), 'deterministic');
+    for (const family of ['walk', 'dice', 'arith', 'letters']) {
+      const ids = big.filter(i => i.family === family).map(i => i.id);
+      assert.deepEqual(ids, [0, 1, 2, 3, 4].map(i => `${family}-1x${scale}-${i}`));
+      assert.ok(ids.every(id => !standard.some(s => s.id === id)), 'no id is shared with the standard set');
+      assert.ok(big.filter(i => i.family === family).every((b, i) => b.prompt !== standard.filter(s => s.family === family)[i].prompt));
+    }
+    // Pattern, trick and uses have no size, so they are the very same items under the same ids.
+    for (const family of ['pattern', 'trick', 'uses']) {
+      assert.deepEqual(big.filter(i => i.family === family), standard.filter(i => i.family === family), family);
+    }
+    // Every key still reads back, and the prompts still end with their question.
+    for (const item of big) {
+      if (item.family !== 'uses') assert.equal(score(item, `ANSWER: ${item.answer}`).correct, true, item.id);
+      assert.ok(item.prompt.endsWith(item.ask), item.id);
+    }
+  }
+  for (const bad of [0, -1, 1.5, '2', NaN]) assert.throws(() => makeItems({ scale: bad }), /scale must be a whole number/, String(bad));
 });
 
 // A complex number as [re, im]: facing north is i, east is 1. Turning right multiplies by -i.
@@ -69,12 +102,14 @@ test('walk answers match an independent walk with complex numbers', () => {
   const byHand = ['1. Turn right.', '2. Walk forward 3 steps.', '3. Turn left.', '4. Sidestep left 2 steps, still facing the same way.',
     '5. Step backward 4 steps, still facing the same way.', '6. Turn around.', '7. Sidestep right 1 step, still facing the same way.'].join('\n');
   assert.equal(walkByComplex(byHand), '0,-4,south');
-  const items = itemsOf('walk');
-  for (const item of items) {
-    assert.equal(numbered(item.prompt).length, 12, item.id);
-    assert.equal(walkByComplex(item.prompt), item.answer, item.id);
+  for (const scale of SCALES) {
+    const items = itemsOf('walk', 40, 5, scale);
+    for (const item of items) {
+      assert.equal(numbered(item.prompt).length, 12 * scale, item.id);
+      assert.equal(walkByComplex(item.prompt), item.answer, item.id);
+    }
+    assert.ok(new Set(items.map(i => i.answer.split(',')[2])).size >= 3, 'all four directions turn up');
   }
-  assert.ok(new Set(items.map(i => i.answer.split(',')[2])).size >= 3, 'all four directions turn up');
 });
 
 // A die as a rotation: each face has a normal vector, and a roll turns the world 90 degrees about a horizontal axis.
@@ -99,9 +134,12 @@ test('dice answers match rotation matrices', () => {
   assert.equal(diceByMatrix('1. north'), 'top=5, north=1');
   assert.equal(diceByMatrix('1. north\n2. north'), 'top=6, north=5');
   assert.equal(diceByMatrix('1. east'), 'top=4, north=2');
-  for (const item of itemsOf('dice')) {
-    assert.equal(numbered(item.prompt).length, 7, item.id);
-    assert.equal(diceByMatrix(item.prompt), item.answer, item.id);
+  for (const scale of SCALES) {
+    for (const item of itemsOf('dice', 40, 5, scale)) {
+      assert.equal(numbered(item.prompt).length, 7 * scale, item.id);
+      assert.match(item.prompt, new RegExp(`You roll it ${7 * scale} times`));
+      assert.equal(diceByMatrix(item.prompt), item.answer, item.id);
+    }
   }
 });
 
@@ -154,14 +192,15 @@ test('pattern answers are the only continuation any of the six rules allows', ()
 
 test('arith answers match a re-reading of the story in exact integers', () => {
   const FRACTION = { half: 2n, 'a third': 3n, 'a quarter': 4n, 'a fifth': 5n };
-  for (const item of itemsOf('arith', 80)) {
+  const items = [...itemsOf('arith', 80), ...itemsOf('arith', 40, 5, 2), ...itemsOf('arith', 40, 5, 4)];
+  for (const item of items) {
     const lines = body(item.prompt);
     const start = lines[0].match(/^A (library|farm|shop|school) has (\d+) (books|eggs|apples|pencils)\.$/);
     assert.ok(start, item.id);
     let v = BigInt(start[2]);
     assert.ok(v >= 120n && v <= 400n, item.id);
     const ops = numbered(item.prompt);
-    assert.equal(ops.length, 6, item.id);
+    assert.equal(ops.length, 6 * scaleOf(item), item.id);
     let m;
     for (const op of ops) {
       if ((m = op.match(/^It receives (\d+) boxes with (\d+) \w+ in each box\.$/))) v += BigInt(m[1]) * BigInt(m[2]);
@@ -180,10 +219,10 @@ test('arith answers match a re-reading of the story in exact integers', () => {
 });
 
 test('letters answers match a recount, capitals included', () => {
-  for (const item of itemsOf('letters', 60)) {
+  for (const item of [...itemsOf('letters', 60), ...itemsOf('letters', 30, 5, 2), ...itemsOf('letters', 30, 5, 4)]) {
     const sentence = item.prompt.match(/Here is a sentence: "(.+)"/)[1];
     const letter = item.ask.match(/the letter "(.)"/)[1];
-    assert.equal(sentence.split(' ').length, 18, item.id);
+    assert.equal(sentence.split(' ').length, 18 * scaleOf(item), item.id);
     assert.ok('earsntoil'.includes(letter));
     let n = 0;
     for (const ch of sentence) if (ch.toLowerCase() === letter) n++;

@@ -47,13 +47,18 @@ const WALK_TEXT = {
 };
 const TURNS = ['left', 'right', 'around'];
 
-function walk(rand) {
+// Scale 1 is the size the brief fixes. A bigger scale stretches walk, dice, arith and letters for a
+// model that already gets nearly every standard item right: a style cannot show it helps where
+// there is nothing left to gain. Turn it up until the strongest model's base score is mid-range.
+const sizeAt = scale => ({ moves: 12 * scale, rolls: 7 * scale, ops: 6 * scale, words: 18 * scale, cap: 4000 * scale });
+
+function walk(rand, size) {
   const kinds = Object.keys(WALK_TEXT);
   let moves;
   // Too few turns or too few steps makes a dull item, so draw again.
   do {
-    moves = Array.from({ length: 12 }, () => ({ kind: pick(rand, kinds), n: int(rand, 1, 5) }));
-  } while (moves.filter(m => TURNS.includes(m.kind)).length < 3 || moves.filter(m => !TURNS.includes(m.kind)).length < 4);
+    moves = Array.from({ length: size.moves }, () => ({ kind: pick(rand, kinds), n: int(rand, 1, 5) }));
+  } while (moves.filter(m => TURNS.includes(m.kind)).length < size.moves / 4 || moves.filter(m => !TURNS.includes(m.kind)).length < size.moves / 3);
   let x = 0, y = 0, d = 0;
   for (const { kind, n } of moves) {
     if (kind === 'left') d = (d + 3) % 4;
@@ -88,8 +93,8 @@ const ROLL = {
   west: d => ({ ...d, top: d.east, west: d.top, bottom: d.west, east: d.bottom }),
 };
 
-function dice(rand) {
-  const rolls = Array.from({ length: 7 }, () => pick(rand, DIRS));
+function dice(rand, size) {
+  const rolls = Array.from({ length: size.rolls }, () => pick(rand, DIRS));
   let die = { top: 1, bottom: 6, north: 2, south: 5, east: 3, west: 4 };
   for (const r of rolls) die = ROLL[r](die);
   const ask = 'After the last roll, which number is on top and which number faces north?';
@@ -97,7 +102,7 @@ function dice(rand) {
     prompt: [
       'A standard six-sided die has opposite faces that add up to 7.',
       'It starts on a table with 1 on top, 6 on the bottom, 2 facing north, 5 facing south, 3 facing east and 4 facing west.',
-      'You roll it 7 times, one after the other. Rolling it in a direction means it tips over its edge on that side,',
+      `You roll it ${size.rolls} times, one after the other. Rolling it in a direction means it tips over its edge on that side,`,
       'so the face that was on top ends up facing that direction. For example, rolling it north puts the old top face on the north side.',
       'The rolls, in order:',
       ...rolls.map((r, i) => `${i + 1}. ${r}`),
@@ -249,13 +254,13 @@ const PART_TEXT = { half: 'half', third: 'a third', quarter: 'a quarter', fifth:
 const GROWTH = [10, 20, 25, 50];
 const rounding = op => op.kind in PARTS || op.kind === 'grow';
 
-function arith(rand) {
+function arith(rand, size) {
   for (;;) {
     const story = pick(rand, STORIES);
     const start = int(rand, 120, 400);
     let v = start;
     const ops = [];
-    while (ops.length < 6) {
+    while (ops.length < size.ops) {
       const kinds = ['boxes', 'lose', 'half', 'third', 'quarter', 'fifth', 'grow'];
       if (v < 600) kinds.push('double');
       const kind = pick(rand, kinds);
@@ -281,7 +286,7 @@ function arith(rand) {
       }
     }
     const rooms = int(rand, 3, 7);
-    if (ops.filter(rounding).length < 2 || v < rooms * 5 || v > 4000) continue;
+    if (ops.filter(rounding).length < size.ops / 3 || v < rooms * 5 || v > size.cap) continue;
 
     const { unit, bin } = story;
     const line = op => ({
@@ -322,9 +327,9 @@ const WORDS = [
 ];
 const LETTERS = ['e', 'a', 'r', 's', 't', 'n', 'o', 'i', 'l'];
 
-function letters(rand) {
+function letters(rand, size) {
   const picked = [];
-  while (picked.length < 18) {
+  while (picked.length < size.words) {
     const w = pick(rand, WORDS);
     if (w !== picked.at(-1)) picked.push(w);
   }
@@ -391,16 +396,19 @@ const OBJECTS = ['a shoelace', 'an empty glass jar', 'a broken umbrella', 'a bed
 
 // ---- items --------------------------------------------------------------------------------------
 
-const generated = (family, build) => (seed, n) => Array.from({ length: n }, (_, i) => ({
-  id: `${family}-${seed}-${i}`,
+// At scale 1 the ids and the seed text are what they were before scale existed, so the standard
+// items, and every results file made from them, never change.
+const generated = (family, build) => (seed, n, scale) => Array.from({ length: n }, (_, i) => ({
+  id: `${family}-${seed}${scale > 1 ? `x${scale}` : ''}-${i}`,
   family,
-  ...build(mulberry32(seedFrom(`${seed}|${family}|${i}`))),
+  ...build(mulberry32(seedFrom(`${seed}|${family}|${i}${scale > 1 ? `|x${scale}` : ''}`)), sizeAt(scale)),
 }));
 
 const MAKERS = {
   walk: generated('walk', walk),
   dice: generated('dice', dice),
-  pattern: generated('pattern', pattern),
+  // No size to turn up, so the same items and ids whichever level is asked for.
+  pattern: (seed, n) => generated('pattern', pattern)(seed, n, 1),
   arith: generated('arith', arith),
   letters: generated('letters', letters),
   // Fixed families ignore the seed: the same eight riddles and four objects every time.
@@ -422,10 +430,13 @@ const MAKERS = {
   })),
 };
 
-export function makeItems({ seed = 1, perFamily = 8, families = FAMILIES } = {}) {
+// `scale` multiplies the length of walk, dice, arith and letters. Pattern, trick and uses have no
+// size to turn up, so they are the same items at every scale.
+export function makeItems({ seed = 1, perFamily = 8, families = FAMILIES, scale = 1 } = {}) {
+  if (!Number.isInteger(scale) || scale < 1) throw new Error(`scale must be a whole number of at least 1, not ${scale}`);
   return families.flatMap(family => {
     if (!MAKERS[family]) throw new Error(`unknown family: ${family}`);
-    return MAKERS[family](seed, perFamily);
+    return MAKERS[family](seed, perFamily, scale);
   });
 }
 
