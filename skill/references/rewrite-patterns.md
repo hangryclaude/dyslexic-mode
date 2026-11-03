@@ -498,3 +498,126 @@ The migration may have failed silently. I have not looked at the logs.
 
 Cut the stacked hedges. Keep one honest statement of what is unknown.
 Do not cut real caveats. They are content.
+
+## 26. Answer first, then short bullets (Layout: reply shape)
+
+Before:
+
+```text
+Great question! There are a number of reasons a laptop fan can get
+loud, and the most common one is that the processor is working hard,
+which happens when many programs run at once, and dust can add to it.
+```
+
+After:
+
+```text
+The fan is loud because the processor is working hard.
+
+- **Heat:** many programs at once make the processor hot.
+- **Dust:** blocked vents make the fan push harder.
+
+Want the steps to clean the vents?
+```
+
+Line 1 holds the answer. Each bullet holds one idea.
+The reply ends with one short question.
+
+## 27. Steps to follow are numbered, not bulleted (Layout: reply shape)
+
+Before:
+
+```text
+- Find the small hole on the back of the router.
+- Press it with a paperclip for 10 seconds.
+- Join the Wi-Fi again.
+```
+
+After:
+
+```text
+Press and hold the reset button for 10 seconds.
+
+1. Find the small hole on the back of the router.
+2. Press it with a paperclip for 10 seconds.
+3. Join the Wi-Fi again.
+```
+
+Bullets are for facts. A process has an order, so number it.
+
+## 28. Things to compare go in a table (Layout: reply shape)
+
+Before:
+
+```text
+- **Plan A:** costs 10 dollars a month.
+- **Plan A:** includes 5 users.
+- **Plan B:** costs 25 dollars a month.
+- **Plan B:** includes 20 users.
+```
+
+After:
+
+```text
+Plan B costs more and covers more users.
+
+|       | Plan A | Plan B |
+|-------|--------|--------|
+| Price | $10    | $25    |
+| Users | 5      | 20     |
+```
+
+A repeated label is a sign the bullets want to be a table.
+
+## 29. Study plan (Layout: Study plans)
+
+Before:
+
+```text
+You should probably start by looking over your notes, then do some
+practice questions, and try to rest the night before, because
+cramming rarely works well.
+```
+
+After:
+
+```text
+Goal: be ready for the exam by Friday.
+Assumed: you have 60 minutes tonight.
+
+1. Put your notes on the desk (1 min)
+2. Read the notes once (20 min)
+3. Break (5 min)
+4. Answer 3 practice questions (25 min)
+5. Break (5 min)
+
+Checklist:
+
+- [ ] Notes on the desk
+- [ ] Notes read
+- [ ] 3 questions answered
+
+Next: do step 1 now.
+```
+
+A message about an exam, homework or a deadline gets a plan.
+Guess the deadline or the amount, and say so in one line. Do not ask first.
+The first step is tiny. No step is over 25 minutes. A break follows every 2.
+
+## 30. One closing question (Layout: reply shape)
+
+Before:
+
+```text
+Does that make sense? Would you like an example? Or should I go
+deeper on how it works? Let me know what you prefer!
+```
+
+After:
+
+```text
+Want an example?
+```
+
+Ask once, and keep it short. Or stop.
+
