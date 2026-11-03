@@ -1,0 +1,74 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 800" width="800" height="800">
+  <defs>
+    <marker id="ah" markerWidth="12" markerHeight="12" refX="10" refY="6" orient="auto">
+      <path d="M0,0 L12,6 L0,12 z" fill="#222"/>
+    </marker>
+  </defs>
+  <rect width="800" height="800" fill="#ffffff"/>
+
+  <!-- Title -->
+  <text x="400" y="50" font-family="Arial, sans-serif" font-size="30" font-weight="bold" text-anchor="middle" fill="#222">START</text>
+
+  <!-- Compass -->
+  <circle cx="150" cy="190" r="80" fill="none" stroke="#444" stroke-width="3"/>
+  <line x1="150" y1="190" x2="150" y2="125" stroke="#c0392b" stroke-width="5" marker-end="url(#ah)"/>
+  <text x="150" y="98" font-family="Arial, sans-serif" font-size="26" font-weight="bold" text-anchor="middle" fill="#222">N</text>
+  <text x="150" y="304" font-family="Arial, sans-serif" font-size="26" text-anchor="middle" fill="#222">S</text>
+  <text x="48" y="198" font-family="Arial, sans-serif" font-size="26" text-anchor="middle" fill="#222">W</text>
+  <text x="256" y="198" font-family="Arial, sans-serif" font-size="26" text-anchor="middle" fill="#222">E</text>
+
+  <!-- Die net -->
+  <!-- 2 North -->
+  <rect x="400" y="100" width="100" height="100" fill="#f4f4f4" stroke="#222" stroke-width="3"/>
+  <text x="450" y="167" font-family="Arial, sans-serif" font-size="48" font-weight="bold" text-anchor="middle" fill="#222">2</text>
+  <!-- 4 West -->
+  <rect x="300" y="200" width="100" height="100" fill="#f4f4f4" stroke="#222" stroke-width="3"/>
+  <text x="350" y="267" font-family="Arial, sans-serif" font-size="48" font-weight="bold" text-anchor="middle" fill="#222">4</text>
+  <!-- 1 Top -->
+  <rect x="400" y="200" width="100" height="100" fill="#ffe9a8" stroke="#222" stroke-width="3"/>
+  <text x="450" y="260" font-family="Arial, sans-serif" font-size="48" font-weight="bold" text-anchor="middle" fill="#222">1</text>
+  <!-- 3 East -->
+  <rect x="500" y="200" width="100" height="100" fill="#f4f4f4" stroke="#222" stroke-width="3"/>
+  <text x="550" y="267" font-family="Arial, sans-serif" font-size="48" font-weight="bold" text-anchor="middle" fill="#222">3</text>
+  <!-- 6 Bottom -->
+  <rect x="600" y="200" width="100" height="100" fill="#f4f4f4" stroke="#222" stroke-width="3"/>
+  <text x="650" y="267" font-family="Arial, sans-serif" font-size="48" font-weight="bold" text-anchor="middle" fill="#222">6</text>
+  <!-- 5 South -->
+  <rect x="400" y="300" width="100" height="100" fill="#f4f4f4" stroke="#222" stroke-width="3"/>
+  <text x="450" y="367" font-family="Arial, sans-serif" font-size="48" font-weight="bold" text-anchor="middle" fill="#222">5</text>
+
+  <!-- Net labels -->
+  <text x="450" y="228" font-family="Arial, sans-serif" font-size="20" text-anchor="middle" fill="#555">TOP</text>
+  <text x="650" y="228" font-family="Arial, sans-serif" font-size="20" text-anchor="middle" fill="#555">BOTTOM</text>
+
+  <!-- Rolls section -->
+  <text x="400" y="475" font-family="Arial, sans-serif" font-size="26" font-weight="bold" text-anchor="middle" fill="#222">ROLLS (in order)</text>
+
+  <!-- Roll 1: North -->
+  <rect x="40" y="500" width="220" height="160" rx="12" fill="#f4f4f4" stroke="#222" stroke-width="3"/>
+  <circle cx="75" cy="535" r="24" fill="#222"/>
+  <text x="75" y="545" font-family="Arial, sans-serif" font-size="28" font-weight="bold" text-anchor="middle" fill="#fff">1</text>
+  <line x1="150" y1="625" x2="150" y2="575" stroke="#c0392b" stroke-width="7" marker-end="url(#ah)"/>
+  <text x="150" y="652" font-family="Arial, sans-serif" font-size="24" font-weight="bold" text-anchor="middle" fill="#222">NORTH</text>
+
+  <!-- Roll 2: North -->
+  <rect x="290" y="500" width="220" height="160" rx="12" fill="#f4f4f4" stroke="#222" stroke-width="3"/>
+  <circle cx="325" cy="535" r="24" fill="#222"/>
+  <text x="325" y="545" font-family="Arial, sans-serif" font-size="28" font-weight="bold" text-anchor="middle" fill="#fff">2</text>
+  <line x1="400" y1="625" x2="400" y2="575" stroke="#c0392b" stroke-width="7" marker-end="url(#ah)"/>
+  <text x="400" y="652" font-family="Arial, sans-serif" font-size="24" font-weight="bold" text-anchor="middle" fill="#222">NORTH</text>
+
+  <!-- Roll 3: East -->
+  <rect x="540" y="500" width="220" height="160" rx="12" fill="#f4f4f4" stroke="#222" stroke-width="3"/>
+  <circle cx="575" cy="535" r="24" fill="#222"/>
+  <text x="575" y="545" font-family="Arial, sans-serif" font-size="28" font-weight="bold" text-anchor="middle" fill="#fff">3</text>
+  <line x1="615" y1="600" x2="685" y2="600" stroke="#2471a3" stroke-width="7" marker-end="url(#ah)"/>
+  <text x="650" y="652" font-family="Arial, sans-serif" font-size="24" font-weight="bold" text-anchor="middle" fill="#222">EAST</text>
+
+  <!-- Rule note -->
+  <text x="400" y="700" font-family="Arial, sans-serif" font-size="22" text-anchor="middle" fill="#333">Old top moves to the side rolled toward</text>
+
+  <!-- End question -->
+  <rect x="250" y="720" width="300" height="60" rx="10" fill="#fff" stroke="#222" stroke-width="3"/>
+  <text x="400" y="760" font-family="Arial, sans-serif" font-size="28" font-weight="bold" text-anchor="middle" fill="#222">END TOP: ?</text>
+</svg>

@@ -1,0 +1,171 @@
+{
+  "model": "claude:haiku",
+  "date": "2026-11-03T22:49:11.820Z",
+  "jobs": 3,
+  "wallMs": 49314,
+  "proof": {
+    "question": "What digit is shown in the picture?",
+    "reply": "7",
+    "ok": true,
+    "ms": 1313,
+    "via": "rsvg-convert"
+  },
+  "runs": [
+    {
+      "id": "grid-walk",
+      "condition": "picture",
+      "gold": "2,4",
+      "given": "2,4",
+      "ok": true,
+      "calls": 2,
+      "png": "grid-walk.picture.png",
+      "reply": "The robot starts at column 2, row 2 and moves right to column 4, up to row 4, left to column 1, down to row 3, right to column 2, and finally up to row 4.\n\nANSWER: 2,4",
+      "ms": 19286,
+      "steps": [
+        {
+          "kind": "draw",
+          "ms": 17562
+        },
+        {
+          "kind": "render",
+          "ms": 64,
+          "via": "rsvg-convert"
+        },
+        {
+          "kind": "answer",
+          "ms": 1660
+        }
+      ]
+    },
+    {
+      "id": "grid-walk",
+      "condition": "whiteboard",
+      "gold": "2,4",
+      "given": "2,4",
+      "ok": true,
+      "calls": 2,
+      "png": "grid-walk.whiteboard.png",
+      "reply": "Starting at column 2, row 2, the robot moves:\n\n1. Right 2: (4, 2)\n2. Up 2: (4, 4)\n3. Left 3: (1, 4)\n4. Down 1: (1, 3)\n5. Right 1: (2, 3)\n6. Up 1: (2, 4)\n\nANSWER: 2,4",
+      "ms": 19059,
+      "steps": [
+        {
+          "kind": "draw",
+          "ms": 17174
+        },
+        {
+          "kind": "render",
+          "ms": 79,
+          "via": "rsvg-convert"
+        },
+        {
+          "kind": "answer",
+          "ms": 1806
+        }
+      ]
+    },
+    {
+      "id": "die-roll",
+      "condition": "picture",
+      "gold": "4",
+      "given": "4",
+      "ok": true,
+      "calls": 2,
+      "png": "die-roll.picture.png",
+      "reply": "The net folds into a cube with the center square as the top face. The labels give NORTH = 2, TOP = 1, EAST = 3, and BOTTOM = 6 (opposite faces sum to 7), so SOUTH = 5 and WEST = 4.\n\n- **Roll north:** the south face comes up to the top. Top = 5, North = 1, Bottom = 2, South = 6, East = 3, West = 4.\n- **Roll north again:** top = 6, North = 5, Bottom = 1, South = 2, East = 3, West = 4.\n- **Roll east:** the west face comes up to the top. Top = 4.\n\nANSWER: 4",
+      "ms": 24041,
+      "steps": [
+        {
+          "kind": "draw",
+          "ms": 16487
+        },
+        {
+          "kind": "render",
+          "ms": 83,
+          "via": "rsvg-convert"
+        },
+        {
+          "kind": "answer",
+          "ms": 7471
+        }
+      ]
+    },
+    {
+      "id": "die-roll",
+      "condition": "whiteboard",
+      "gold": "4",
+      "given": "4",
+      "ok": true,
+      "calls": 2,
+      "png": "die-roll.whiteboard.png",
+      "reply": "After the first two north rolls, the top is 6. The third roll (east) brings the west face up, which is 4.\n\nStarting faces: top 1, north 2, east 3, west 4, south 5, bottom 6.\n\n- **Roll 1 (north):** the top moves to the north side, so the south face (5) comes up. Now top 5, north 1, south 6, bottom 2.\n- **Roll 2 (north):** the south face (6) comes up. Now top 6, north 5, south 2, bottom 1.\n- **Roll 3 (east):** the west face (4) comes up. East and west are unchanged, so west is still 4.\n\nANSWER: 4",
+      "ms": 28912,
+      "steps": [
+        {
+          "kind": "draw",
+          "ms": 23303
+        },
+        {
+          "kind": "render",
+          "ms": 79,
+          "via": "rsvg-convert"
+        },
+        {
+          "kind": "answer",
+          "ms": 5530
+        }
+      ]
+    },
+    {
+      "id": "riddle",
+      "condition": "picture",
+      "gold": "short",
+      "given": "SHORT",
+      "ok": true,
+      "calls": 2,
+      "png": "riddle.picture.png",
+      "reply": "The word is **SHORT**. It has 5 letters, and adding \"er\" gives \"shorter,\" which is the word the picture describes. The \"length goes DOWN\" label is a play on meaning: the result is the word \"shorter,\" not a shorter string of letters.\n\nANSWER: SHORT",
+      "ms": 17645,
+      "steps": [
+        {
+          "kind": "draw",
+          "ms": 13947
+        },
+        {
+          "kind": "render",
+          "ms": 77,
+          "via": "rsvg-convert"
+        },
+        {
+          "kind": "answer",
+          "ms": 3621
+        }
+      ]
+    },
+    {
+      "id": "riddle",
+      "condition": "whiteboard",
+      "gold": "short",
+      "given": "short",
+      "ok": true,
+      "calls": 2,
+      "png": "riddle.whiteboard.png",
+      "reply": "The answer is **SHORT**. Adding \"er\" gives \"shorter,\" which is the result shown in the picture.\n\nANSWER: short",
+      "ms": 14625,
+      "steps": [
+        {
+          "kind": "draw",
+          "ms": 11105
+        },
+        {
+          "kind": "render",
+          "ms": 74,
+          "via": "rsvg-convert"
+        },
+        {
+          "kind": "answer",
+          "ms": 3445
+        }
+      ]
+    }
+  ]
+}
