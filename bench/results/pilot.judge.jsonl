@@ -1,0 +1,2 @@
+{"model":"claude:haiku","id":"uses-1","judge":"opencode:opencode-go/gpt-6-luna","ranks":null,"error":"opencode: Go usage limit exceeded, retry in 123 h"}
+{"model":"claude:haiku","id":"uses-1","object":"a shoelace","judge":"claude:sonnet","labels":{"A":"explorer","B":"base","C":"vote3","D":"scrambled","E":"dyslexic","F":"careful"},"ranking":["F","E","A","B","C","D"],"ranks":{"careful":1,"dyslexic":2,"explorer":3,"base":4,"vote3":5,"scrambled":6},"ms":8560,"error":null}
