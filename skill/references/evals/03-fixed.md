@@ -18,9 +18,9 @@ Four phases, 7 days in total.
 Phase 3 is the largest. It has two extra tasks:
 
 - Change the user store in a few places.
-  It uses an object-to-table mapper (ORM).
+  - It uses an object-to-table mapper (ORM).
 - Change the cache rules on the content network (CDN).
-  They must keep the `Authorization` header.
+  - They must keep the `Authorization` header.
 
 ## Risk
 

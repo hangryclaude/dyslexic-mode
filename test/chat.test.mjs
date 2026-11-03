@@ -101,7 +101,7 @@ test('reply keeps a clean answer without a rewrite', async () => {
 });
 
 test('long raw lines do not force a rewrite, because the renderer wraps them', async () => {
-  const wide = 'The cat sat on the mat and the dog ran to the park to see the big red ball by the old tree.';
+  const wide = 'The curious orange kitten watched quietly while the brown puppy chased a bouncing red ball around the garden.';
   assert.ok(wide.length > 80);
   let calls = 0;
   const r = await reply(async () => { calls++; return { text: wide, sessionId: 's' }; }, 'hi', {});

@@ -1,0 +1,68 @@
+[
+  {
+    "prompt": "explain photosynthesis",
+    "thinking": "off",
+    "text": "Photosynthesis turns light, water and carbon dioxide into sugar and oxygen.\n\n- **Where:** It happens in chloroplasts, inside plant leaf cells.\n- **Pigment:** Chlorophyll absorbs red and blue light. It reflects green.\n- **Light stage:** Light splits water. This makes oxygen and energy carriers.\n- **Oxygen:** The plant releases the oxygen into the air.\n- **Sugar stage:** The Calvin cycle uses those carriers to fix carbon dioxide.\n- **Product:** The plant builds glucose, which it uses or stores as starch.\n\nThe overall equation is six CO₂ plus six H₂O, using light energy, giving C₆H₁₂O₆ plus six O₂.\n\nDo you want the light stage or the Calvin cycle explained in more detail?",
+    "ms": 2375,
+    "cost": 0.0009450000000000001,
+    "model": "claude-haiku-5-5",
+    "tokensOut": 280
+  },
+  {
+    "prompt": "I have a history exam on Friday on the Cold War",
+    "thinking": "off",
+    "text": "Goal: know the main Cold War events well enough for Friday's exam.\nAssumed: about 90 minutes free today, and the exam covers 1945 to 1991.\n\n1. Write the five Cold War topics on one page. (1 min)\n2. Make a timeline from 1945 to 1991. (20 min)\n3. Break (5 min)\n4. Write notes on the Truman Doctrine and Marshall Plan. (25 min)\n5. Write notes on the arms race and Cuban Missile Crisis. (20 min)\n6. Break (5 min)\n7. Answer three practice essay questions from memory. (20 min)\n\nChecklist:\n\n- [ ] Write the five topics on one page\n- [ ] Make a timeline from 1945 to 1991\n- [ ] Write notes on the Truman Doctrine and Marshall Plan\n- [ ] Write notes on the arms race and Cuban Missile Crisis\n- [ ] Answer three practice essay questions from memory\n\nNext: start step 1 now. It takes one minute.",
+    "ms": 6521,
+    "cost": 0.00077019,
+    "model": "claude-haiku-5-5",
+    "tokensOut": 1253
+  },
+  {
+    "prompt": "how do I set up a budget",
+    "thinking": "off",
+    "text": "The simplest budget is a list of income, fixed costs, and spending limits.\n\n1. Write down your monthly take-home pay.\n2. List fixed bills: rent, utilities, phone, subscriptions.\n3. Subtract bills from pay. That is your spending money.\n4. Check last month's bank and card statements for typical spending.\n5. Set a limit for each spending category, such as food or fun.\n6. Pick a tool: a spreadsheet, a notes app, or a budget app.\n7. Each week, compare what you spent with your limits.\n8. Adjust the limits at the end of each month.\n\nDo you want a simple template for a spreadsheet?",
+    "ms": 3099,
+    "cost": 0.00024759,
+    "model": "claude-haiku-5-5",
+    "tokensOut": 211
+  },
+  {
+    "prompt": "what is the difference between RAM and storage",
+    "thinking": "off",
+    "text": "RAM is fast temporary memory, while storage keeps data long term.\n\n- **RAM:** Holds what your computer is actively using right now.\n- **RAM:** Loses everything when the power turns off.\n- **Storage:** Keeps files, apps and the operating system saved.\n- **Storage:** Keeps data even when the power is off.\n- **Speed:** RAM is much faster to read and write.\n- **Size:** Storage is usually much bigger, measured in terabytes.\n\nThink of RAM as your desk and storage as your filing cabinet. You work on documents at the desk, then file them away when you finish.\n\nWould you like to know how much RAM or storage you need?",
+    "ms": 2169,
+    "cost": 0.00025089000000000003,
+    "model": "claude-haiku-5-5",
+    "tokensOut": 216,
+    "rewrite": {
+      "hits": [
+        "repeated-label: \"ram\" starts 2 bullets, like a grid",
+        "repeated-label: \"storage\" starts 2 bullets, like a grid"
+      ],
+      "text": "RAM is fast, temporary memory, while storage keeps data long term.\n\n| | **RAM** | **Storage** |\n|---|---|---|\n| **Holds** | What your computer is using right now | Files, apps and the operating system |\n| **After power off** | Everything is lost | Data is kept |\n| **Speed** | Much faster to read and write | Slower than RAM |\n| **Size** | Smaller, measured in gigabytes | Bigger, usually measured in terabytes |\n\nThink of RAM as your desk and storage as your filing cabinet. You work on documents at the desk, then file them away when you finish.\n\nWould you like to know how much RAM or storage you need?",
+      "ms": 1931
+    }
+  },
+  {
+    "prompt": "I have a history exam on Friday on the Cold War",
+    "thinking": "strong",
+    "text": "Goal: know the Cold War's causes, key events and effects, by Friday.\nAssumed: the exam is Friday 6 November, and you have about one hour tonight.\n\n1. Write the exam topics on one page. (2 min)\n2. Make a timeline of the main Cold War dates. (20 min)\n3. Break. (5 min)\n4. Learn why the superpowers became rivals after 1945. (25 min)\n5. Learn the big crises: Berlin, Korea and Cuba. (20 min)\n6. Break. (5 min)\n7. Answer one past exam question out loud, from memory. (20 min)\n\nChecklist:\n\n- [ ] Step 1: write the exam topics\n- [ ] Step 2: make the timeline\n- [ ] Step 4: learn the causes\n- [ ] Step 5: learn the crises\n- [ ] Step 7: answer one question aloud\n\nNext: do step 1 now, then tell me the topics you wrote.",
+    "ms": 5486,
+    "cost": 0.0013648000000000002,
+    "model": "claude-haiku-5-5",
+    "tokensOut": 974
+  },
+  {
+    "prompt": "I have a history exam on Friday on the Cold War",
+    "thinking": "strong",
+    "env": {
+      "CLAUDE_CODE_DISABLE_THINKING": "1"
+    },
+    "note": "private thinking off",
+    "text": "Goal: be ready for the Cold War exam by Friday.\n\nAssumed: the exam covers 1945 to 1991, with short and essay questions.\n\n1. Check your notes for the exam topics (1 min)\n2. Make a timeline of 10 key dates (20 min)\n3. Break (5 min)\n4. Write 5 causes of the Cold War, one line each (25 min)\n5. Learn 4 crises: Berlin, Korea, Cuba, Vietnam (20 min)\n6. Break (5 min)\n7. Answer one essay question out loud, from memory (20 min)\n\nChecklist:\n\n- [ ] Check your notes for the exam topics\n- [ ] Make a timeline of 10 key dates\n- [ ] Write 5 causes of the Cold War\n- [ ] Learn 4 crises\n- [ ] Answer one essay question out loud\n\nNext: send me your exam topics, and I will make the next session.",
+    "ms": 7608,
+    "cost": 0.00062858,
+    "model": "claude-haiku-5-5",
+    "tokensOut": 1169
+  }
+]

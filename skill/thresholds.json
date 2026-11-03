@@ -17,9 +17,19 @@
     "why": "research.md section 3: paragraph spacing is the layout lever the AI holds; crowding evidence is moderate in children, weak in adults. Hard 5 matches Dyslexia Scotland."
   },
   "paragraph_sentences": {
-    "soft": 3,
-    "hard": 4,
-    "why": "research.md section 3: one idea per short paragraph."
+    "soft": 2,
+    "hard": 3,
+    "why": "research.md section 3: one idea per short paragraph. Two short sentences is the reply shape; a third is soft, a fourth is hard."
+  },
+  "first_line_words": {
+    "soft": 12,
+    "hard": 20,
+    "why": "research.md sections 1 and 4: eye movement is laborious (moderate) and the answer belongs in line 1 (weak). One short sentence is a style default, not a trial result."
+  },
+  "bullet_words": {
+    "soft": 12,
+    "hard": 25,
+    "why": "research.md section 1: many similar items add cost (weak). One idea per bullet, so a bullet is short. Hard 25 matches the sentence cap."
   },
   "line_chars": {
     "soft": 70,
@@ -76,8 +86,8 @@
     "why": "research.md section 1: eye movement is laborious (moderate); fatigue evidence is thin (weak). Front-load so the reader can stop."
   },
   "heading_after_lines": {
-    "value": 10,
-    "why": "research.md section 3: real headings aid navigation (weak-moderate, BDA)."
+    "value": 12,
+    "why": "research.md section 3: real headings aid navigation (weak-moderate, BDA). A short reply needs none, so a heading in a reply of this many lines or fewer is soft."
   },
   "code_block_lines": {
     "soft": 15,
@@ -170,8 +180,18 @@
   },
   "bold_per_reply": {
     "soft": 1,
-    "hard": 1,
-    "why": "research.md section 3: bold keeps letter shapes, italics read worse (moderate-weak). One bold phrase per reply. Whole-sentence bold dilutes the cue."
+    "hard": 3,
+    "label_words": 3,
+    "why": "research.md section 3: bold keeps letter shapes, italics read worse (moderate-weak). A bold label of 3 words or fewer at the start of a bullet is free. Other bold phrases: one per reply is fine, more than 3 is emphasis overload."
+  },
+  "repeated_label": {
+    "soft": 1,
+    "hard": 2,
+    "why": "One bold label that starts several bullets means the bullets are the rows of a table, or items to nest under one label. A mechanical proxy for a comparison written as bullets; no trial. A label used twice is soft, three times is hard. Two labels that each repeat make a grid, which is hard at two uses each."
+  },
+  "questions_per_reply": {
+    "max": 1,
+    "why": "research.md section 1: every extra item costs effort (weak). End with at most one short question or next step."
   },
   "jargon": {
     "words": [
@@ -189,6 +209,53 @@
       "deserialize"
     ],
     "why": "research.md section 2: BDA says explain jargon on first use (weak-moderate). Small list; the human pass finds the rest."
+  },
+  "first_step_minutes": {
+    "soft": 2,
+    "hard": 5,
+    "why": "research.md section 6: a tiny first step lowers the cost of starting (convention, no trial). Under 2 minutes is the target; a first step over 5 minutes is not tiny."
+  },
+  "step_minutes": {
+    "soft": 25,
+    "hard": 25,
+    "why": "research.md section 6: 25-minute time boxes are the Pomodoro convention (no dyslexia trial). Soft and hard match: a longer box is always a hit."
+  },
+  "steps_per_break": {
+    "soft": 2,
+    "hard": 4,
+    "why": "research.md section 6: a break after every 2 steps. A third step in a row is soft; a fifth is hard."
+  },
+  "plan_triggers": {
+    "words": [
+      "studying",
+      "study for",
+      "to study",
+      "exam",
+      "exams",
+      "homework",
+      "revision",
+      "revise for",
+      "revising for",
+      "essay",
+      "essays",
+      "coursework",
+      "thesis",
+      "deadline"
+    ],
+    "weak_words": [
+      "test",
+      "tests",
+      "quiz",
+      "project",
+      "projects",
+      "assignment",
+      "assignments",
+      "report",
+      "presentation",
+      "paper",
+      "study"
+    ],
+    "why": "wantsPlan() in reread.mjs. A word in the first list makes the reply a plan. A word in the second list needs a deadline cue too, such as 'by Friday' or 'tomorrow', so 'the test suite' and 'this project' do not."
   },
   "note_copy": "This file is the one reread.mjs reads. The copy in ~/dev/dyslexic-reread is the research copy and can drift."
 }
