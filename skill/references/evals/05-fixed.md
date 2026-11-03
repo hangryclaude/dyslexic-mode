@@ -1,4 +1,5 @@
 Staging works. Production is not proven yet.
+
 The Stripe webhook is untested.
 
 ## Checked
@@ -15,13 +16,14 @@ https://staging.example.com/health
 ## Assumed, not checked
 
 - `STRIPE_KEY` is set correctly.
-  The deploy log showed no complaint. I never looked at the value.
+  - The deploy log showed no complaint.
+  - I never looked at the value.
 
 ## Not tested
 
 - The Stripe webhook.
 - The rollback path.
-  If production breaks, we may not be able to undo the change cleanly.
+  - If production breaks, we may fail to undo the change cleanly.
 
 ## Verdict
 

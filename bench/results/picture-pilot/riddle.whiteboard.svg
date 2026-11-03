@@ -1,0 +1,29 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 800" width="800" height="800">
+  <rect x="0" y="0" width="800" height="800" fill="#ffffff"/>
+  <text x="400" y="60" font-family="Arial, sans-serif" font-size="32" font-weight="bold" text-anchor="middle" fill="#222">Word + 2 letters</text>
+
+  <text x="100" y="140" font-family="Arial, sans-serif" font-size="24" fill="#222">1  Word (5 letters)</text>
+  <g fill="#ffffff" stroke="#333" stroke-width="3">
+    <rect x="100" y="160" width="70" height="80"/>
+    <rect x="180" y="160" width="70" height="80"/>
+    <rect x="260" y="160" width="70" height="80"/>
+    <rect x="340" y="160" width="70" height="80"/>
+    <rect x="420" y="160" width="70" height="80"/>
+  </g>
+
+  <text x="520" y="222" font-family="Arial, sans-serif" font-size="50" text-anchor="middle" fill="#222">+</text>
+
+  <text x="560" y="140" font-family="Arial, sans-serif" font-size="24" fill="#222">2  Add 2 letters</text>
+  <g fill="#ffffff" stroke="#333" stroke-width="3">
+    <rect x="570" y="160" width="70" height="80"/>
+    <rect x="650" y="160" width="70" height="80"/>
+  </g>
+
+  <line x1="400" y1="270" x2="400" y2="345" stroke="#333" stroke-width="5"/>
+  <polygon points="380,340 420,340 400,370" fill="#333"/>
+
+  <text x="400" y="400" font-family="Arial, sans-serif" font-size="28" font-weight="bold" text-anchor="middle" fill="#222">3  Result: SHORTER</text>
+
+  <rect x="200" y="430" width="400" height="120" fill="#f2f7ff" stroke="#333" stroke-width="3"/>
+  <text x="400" y="510" font-family="Arial, sans-serif" font-size="64" font-weight="bold" text-anchor="middle" fill="#222">?</text>
+</svg>

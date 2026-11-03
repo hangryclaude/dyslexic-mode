@@ -69,7 +69,7 @@ breaks, blank lines, emphasis, lists and sentence shape.
 | Underline and ALL CAPS are guide advice. No dyslexia trial found. | weak | Free to follow. Do it. |
 | Quiet pages beat decorated ones. | weak | No banners, box art, decorative emoji. |
 | Readers restyle spacing (WCAG 1.4.12). | strong as a standard | Use real lists and headings. Avoid padding-space alignment. |
-| Real headings, clearly larger than body (BDA). | weak-moderate | Markdown headings for anything over about 10 lines. |
+| Real headings, clearly larger than body (BDA). | weak-moderate | Markdown headings for anything over about 12 lines. A shorter reply needs none. |
 
 Sources:
 - https://pmc.ncbi.nlm.nih.gov/articles/PMC3396504 (Zorzi 2012, the letter-spacing paper)
@@ -115,6 +115,26 @@ Sources:
 - https://www.brainfacts.org/Diseases-and-Disorders/Childhood-Disorders/2018/Do-People-With-Dyslexia-Read-and-Write-Backwards-082218
 - https://www.understood.org/en/articles/faqs-about-vision-and-dyslexia
 - https://eprints.whiterose.ac.uk/104441
+
+## 6. Reply shape and study plans
+
+These rows are design choices. They did not go through the adversarial check,
+and no trial tests them on dyslexic readers in chat. Each builds on a row above
+or on common practice, and costs little to follow. Angus's feedback beats them.
+
+| Choice | Strength | Basis |
+|--------|----------|-------|
+| Line 1 is the answer, in one short sentence (12 words or fewer). | weak | Answer-first rows in sections 1 and 4. |
+| Bullets of 12 words or fewer, one idea each. | gap | Multi-item cost in section 1. No direct trial. |
+| Steps in a numbered list, comparisons in a table. | weak | Number steps (section 1). Aligned columns (section 4). |
+| A short bold label may start a bullet. | gap | Bold is the safe emphasis (section 3). Labels are a design choice. |
+| At most one closing question. | gap | Every extra item costs effort (section 1). |
+| Time boxes of 25 minutes, a break after every 2 steps. | gap | Pomodoro convention. No dyslexia trial. |
+| A first step that takes under 2 minutes. | gap | Common advice for starting a hard task. No dyslexia trial. |
+| A checklist with [ ] boxes at the end of a plan. | gap | Design choice. No direct evidence. |
+| Guess the deadline and say so. Never ask first. | gap | Design choice: a question delays the plan and adds reading. |
+
+Sources: none. These are conventions, so the numbers in `thresholds.json` say so.
 
 ## Myths: do not do
 

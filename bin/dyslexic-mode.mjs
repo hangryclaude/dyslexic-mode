@@ -1,20 +1,28 @@
 #!/usr/bin/env node
 import { createInterface } from 'node:readline';
 import { ask, toolLine } from '../lib/claude.mjs';
-import { openSession } from '../lib/session.mjs';
+import { askFor, canonicalModel, learnContextWindow, listModels, openSessionFor, providerOf, refreshModels } from '../lib/models.mjs';
 import { reply } from '../lib/filter.mjs';
 import { systemPrompt } from '../lib/prompt.mjs';
 import { leet, DIVIDER } from '../lib/pliny.mjs';
 import { learn } from '../lib/learn.mjs';
-import { append, rows, readProfile, readSettings, saveSettings, sessions } from '../lib/store.mjs';
+import { append, rows, readProfile, readSettings, saveSettings, sessions, saveFile, latestFile, slug, today } from '../lib/store.mjs';
 import { summarize, table } from '../lib/stats.mjs';
 import { TARGET, questionFor, order, pickOf, PLAIN_SYSTEM, words } from '../lib/readtest.mjs';
-import { MENU, resolve } from '../lib/commands.mjs';
-import { setPalette, randomPalette, nextPalette, palette } from '../lib/palette.mjs';
-import { intro, thinking, brainScreen, menu, promptGlyph, swatch } from '../lib/anim.mjs';
-import { ESC, dim, fancy } from '../lib/style.mjs';
+import { MENU, GROUPS, resolve } from '../lib/commands.mjs';
+import { setPalette, randomPalette, nextPalette, palette, grad } from '../lib/palette.mjs';
+import { intro, thinking, brainScreen, menu, secret, promptGlyph, swatch } from '../lib/anim.mjs';
+import { ESC, dim, fancy, fg, heading } from '../lib/style.mjs';
 import { stream } from '../lib/render.mjs';
-import { readInPlace, readerView } from '../lib/reader.mjs';
+import { models, modelLine, findModel } from '../lib/modelmenu.mjs';
+import { contextWindow, estimateTokens, usedTokens, hasUsage, breakdown, barCounts, bar, FILL, count, share } from '../lib/context.mjs';
+import { openaiKey, saveOpenaiKey } from '../lib/keys.mjs';
+import { openVoice, NO_KEY } from '../lib/voicechat.mjs';
+import { LEVELS, LEVEL_NAMES, promptThinking, withHistory, exploreTurn } from '../lib/think.mjs';
+import { COMPACT_ASK, carryPrompt } from '../lib/compact.mjs';
+import { PLAN_SYSTEM, planPrompt, parsePlan, planMarkdown } from '../lib/plan.mjs';
+import { chatMarkdown } from '../lib/chatlog.mjs';
+import { copy } from '../lib/clip.mjs';
 
 const argv = process.argv.slice(2);
 const flag = name => argv.includes(`--${name}`);
@@ -25,26 +33,43 @@ const state = {
   calm: flag('calm'),
   // Full access skips every permission prompt, so a stranger who installs this must opt in.
   tools: flag('full') && !flag('no-tools'),
-  model: opt('model'),
-  // Read every reply aloud. It and the speed are kept between launches.
-  aloud: saved.aloud ?? false,
-  rate: Number(opt('rate')) || saved.rate || 180,
-  voice: opt('voice') ?? saved.voice,
+  // The model and the thinking level are kept between launches. --model is for one launch. The
+  // model is held under the name the registry gives it, so "sonnet" and claude/sonnet are one model.
+  model: canonicalModel(opt('model') ?? saved.model),
+  thinking: LEVEL_NAMES.includes(saved.thinking) ? saved.thinking : 'off',
   sessionId: undefined,
   last: null,
-  // Where the last reply sits on screen, so Tab can light up its words in place.
-  shown: null,
+  // The chat so far, for /export and for explorer, which has no session to remember it.
+  history: [],
+  // What the last reply said about the context: its usage, and the window if the model told us.
+  usage: null,
+  window: undefined,
+  // Whether the ChatGPT voice chat is running. It is its own chat, beside this one.
+  voice: false,
 };
+// A model nobody takes (a typo in --model, a setting that went stale) would fail the first message,
+// and full access is Claude's alone. Both are put right here, and said once the screen is up.
+const startup = [];
+if (state.model != null && !providerOf(state.model)) {
+  startup.push(`no model called "${state.model}", so the default model is used`);
+  state.model = undefined;
+}
+if (state.tools && providerOf(state.model) !== 'claude') {
+  startup.push(`full access works with Claude only, so tools are off for ${state.model}`);
+  state.tools = false;
+}
 if (opt('palette')) setPalette(opt('palette'));
 else randomPalette();
 const out = process.stdout;
-let speech = null, session = null;
-process.on('exit', () => { speech?.stop(); session?.close(); if (out.isTTY) out.write(`${ESC}?25h`); });
+let session = null, voice = null, leaving = false;
+// The voice chat holds the microphone, so it is let go of on every way out. A closed terminal or a
+// kill would skip the handler, so they go through it.
+process.on('exit', () => { leaving = true; voice?.stop(); session?.close(); if (out.isTTY) out.write(`${ESC}?25h`); });
+for (const [signal, code] of [['SIGHUP', 129], ['SIGTERM', 143]]) process.on(signal, () => process.exit(code));
 
 const width = () => Math.min((out.columns || 80) - 4, Number(opt('width')) || 72);
 const view = write => stream(write, { width: width(), columns: out.columns || 80, styled: fancy(out), transform: state.pliny ? leet : undefined });
 const fit = (s, max) => (s.length > max ? s.slice(0, Math.max(0, max - 1)) + '…' : s);
-const newlines = s => (s.match(/\n/g) || []).length;
 // Quiet text is dimmed on a terminal and plain anywhere else, like a pipe or a log.
 const soft = s => (fancy(out) ? dim(s) : s);
 const ago = ts => {
@@ -52,31 +77,55 @@ const ago = ts => {
   return m < 1 ? 'just now' : m < 60 ? `${m}m ago` : m < 1440 ? `${Math.round(m / 60)}h ago` : `${Math.round(m / 1440)}d ago`;
 };
 
-// The chat's claude process. A running process can't change its system prompt, so a new
-// rule or a tools switch drops it, and the next turn resumes the same session in a new one.
-const system = (tools = state.tools) => systemPrompt({ profile: readProfile(), tools });
-const chatSession = () => (session ??= openSession({ system: system(), model: state.model, tools: state.tools, resume: state.sessionId }));
+// The chat's claude process. A running process can't change its system prompt, so a new rule or
+// a tools switch drops it, and the next turn resumes the same session in a new one.
+const system = (tools = state.tools, level = state.thinking) => systemPrompt({ profile: readProfile(), tools, thinking: promptThinking(level) });
+// The one place a chat session is opened, and the one place a side call picks its model. Both go
+// to whichever provider the model's id names: Claude, grok or opencode.
+const open = opts => openSessionFor(state.model, { system: system(), tools: state.tools, ...opts });
+const side = (prompt, opts) => askFor(state.model, prompt, opts);
+const chatSession = () => (session ??= open({ resume: state.sessionId }));
 const dropSession = () => { session?.close(); session = null; };
+// Explorer sends every message as one-shot calls, so it has no chat process to start.
+const warm = () => { if (state.thinking !== 'explorer') chatSession().warm(); };
+
+// What an old chat said, turn by turn, so /export and explorer have it again.
+const chatOf = id => rows('chats.jsonl').filter(c => c.session === id).map(({ q, text }) => ({ q, text }));
+
+// A chat's session id means nothing to a provider that did not begin it, so going back to a chat
+// from another provider switches to its model. Within one provider the model in use stays. A chat
+// from before models were logged was Claude's. A chat keeps its tools too. Returns what changed.
+function backTo(s) {
+  const said = [];
+  const theirs = s.model == null ? 'claude' : providerOf(s.model);
+  if (theirs !== providerOf(state.model)) {
+    state.model = s.model == null || !theirs ? undefined : canonicalModel(s.model);
+    state.window = undefined;
+    said.push(state.model ? `that chat used ${state.model}, so that model is on` : 'that chat used Claude, so its default model is on');
+  }
+  if (s.tools != null && s.tools !== state.tools) {
+    state.tools = s.tools;
+    said.push(s.tools ? 'that chat had full access, so full access is on' : 'that chat was chat only, so tools are off');
+  }
+  return said;
+}
 
 const latest = argv.includes('-c') || flag('continue') ? sessions()[0] : null;
-if (latest) { state.sessionId = latest.id; state.tools = latest.tools ?? state.tools; }
+if (latest) { state.sessionId = latest.id; state.history = chatOf(latest.id); backTo(latest); }
 // Claude starts while the intro plays, so the first reply skips the start-up wait.
-chatSession().warm();
+warm();
 
 if (!state.calm) await intro(out);
 else out.write('\n  DYSLEXIC MODE\n\n  press / then Enter for the menu.\n\n');
-out.write(soft(state.tools ? '  full access: files, shell, web, your skills, Claude agents, Codex' : '  chat only: tools are off') + '\n');
-out.write(soft(`  tab reads a reply aloud. esc stops a reply.${state.aloud ? ' voice is on.' : ''}`) + '\n\n');
+const using = [state.tools ? 'full access: files, shell, web, your skills, Claude agents, Codex' : 'chat only: tools are off'];
+if (state.model) using.push(`model ${state.model}`);
+if (state.thinking !== 'off') using.push(`thinking ${state.thinking}`);
+out.write(soft(`  ${using.join(' · ')}`) + '\n');
+for (const line of startup) out.write(soft(`  ${line}`) + '\n');
+out.write(soft('  esc stops a reply. /help lists every command.') + '\n\n');
 
 const rl = createInterface({ input: process.stdin, output: out, prompt: promptGlyph(out) });
 const note = s => out.write(soft(`  ${s}`) + '\n\n');
-// A note while the prompt is up goes above it, and what is typed so far stays.
-const tell = s => {
-  out.write(`\r${ESC}2K`);
-  note(s);
-  if (state.shown) state.shown.below += 2;
-  rl.prompt(true);
-};
 const clear = () => out.write(`${ESC}2J${ESC}H`);
 const show = text => {
   out.write('\n');
@@ -93,8 +142,6 @@ process.stdin.removeAllListeners('keypress');
 let busy = null, held = [], waiter = null, spinner = null;
 process.stdin.on('keypress', (s, key = {}) => {
   if (busy) return busy(s, key);
-  if (key.name === 'escape' && speech) return stopSpeech();
-  if (key.name === 'tab' && !rl.line && !waiter) return readTab();
   for (const l of lineKeys) l(s, key);
 });
 
@@ -132,30 +179,44 @@ async function chat(msg) {
     out.write(`${fancy(out) ? `\r${ESC}2K` : ''}${line}\n`);
     spinner?.redraw();
   });
-  const s = chatSession();
-  const r = await working(() => reply((p, o) => s.send(p, o), msg, {
-    onText: d => v.push(d),
-    onTool: b => { v.mark(); spinner?.status(toolLine(b)); },
-    onRewrite: hard => spinner?.status(`tidying ${hard.length} trip point${hard.length === 1 ? '' : 's'}`),
-  }), () => s.interrupt());
-  let shown = v.end();
-  state.sessionId = r.sessionId;
+  const onRewrite = hard => spinner?.status(`tidying ${hard.length} trip point${hard.length === 1 ? '' : 's'}`);
+  const explorer = state.thinking === 'explorer';
+  let run, stop;
+  if (explorer) {
+    // No tools here: three drafts running the same command at once would run it three times.
+    const turn = exploreTurn({ ask: (prompt, o) => side(prompt, { system: system(false), ...o }), onStatus: s => spinner?.status(s) });
+    run = () => reply(turn.go, withHistory(msg, state.history), { onRewrite });
+    stop = turn.stop;
+  } else {
+    const s = chatSession();
+    run = () => reply((p, o) => s.send(p, o), msg, {
+      onText: d => v.push(d),
+      onTool: b => { v.mark(); spinner?.status(toolLine(b)); },
+      onRewrite,
+    });
+    stop = () => s.interrupt();
+  }
+  const r = await working(run, stop);
+  // Explorer's answer arrives whole, once its calls are done.
+  if (explorer && !r.stopped) v.push(r.text);
+  const shown = v.end();
+  if (!explorer) state.sessionId = r.sessionId;
   if (r.stopped) {
-    // What came in before Esc stays on screen, so Tab reads it and ! flags it.
-    const tail = '\n' + soft('  stopped') + '\n\n';
-    out.write(tail);
-    if (r.text.trim()) { state.last = r.text; state.shown = { ...shown, below: 1 + newlines(tail) }; }
+    // What came in before Esc stays on screen, so ! can flag it.
+    out.write('\n' + soft('  stopped') + '\n\n');
+    if (r.text.trim()) state.last = r.text;
     return;
   }
-  if (r.rewrites) shown = swapDraft(shown, r.text);
+  if (r.rewrites && !explorer) swapDraft(shown, r.text);
   state.last = r.text;
+  state.history.push({ q: msg, text: r.text });
+  state.usage = hasUsage(r.usage) ? r.usage : null;
+  rememberWindow(r.contextWindow ?? r.usage?.contextWindow);
   const ms = Date.now() - t0;
-  append('chats.jsonl', { ts: Date.now(), session: r.sessionId, q: msg.slice(0, 300), text: r.text, rewrites: r.rewrites, hard: r.hard, words: words(r.text), tools: state.tools, ms, first });
+  append('chats.jsonl', { ts: Date.now(), session: r.sessionId, q: msg.slice(0, 300), text: r.text, rewrites: r.rewrites, hard: r.hard, words: words(r.text), tools: state.tools, model: state.model ?? null, thinking: state.thinking, ms, first });
   const check = r.hard ? `${r.hard} hard hit left` : r.rewrites ? 'tidied once' : 're-read clean';
-  const tail = `${state.pliny ? `\n  ${DIVIDER}\n` : ''}\n` + soft(fit(`  ${(ms / 1000).toFixed(1)}s · ${check} · ! if it tripped you · tab reads it aloud`, (out.columns || 80) - 1)) + '\n\n';
+  const tail = `${state.pliny ? `\n  ${DIVIDER}\n` : ''}\n` + soft(fit(`  ${(ms / 1000).toFixed(1)}s · ${check}${explorer ? ' · explored 3 ways' : ''} · ! if it tripped you`, (out.columns || 80) - 1)) + '\n\n';
   out.write(tail);
-  state.shown = { ...shown, below: 1 + newlines(tail) };
-  if (state.aloud) startSpeech();
 }
 
 // The rewrite takes the draft's place when the whole draft is still on screen. Otherwise it
@@ -166,32 +227,7 @@ function swapDraft(shown, text) {
   else note('tidier version:');
   const v = view(l => out.write(l + '\n'));
   v.push(text);
-  return v.end();
-}
-
-function startSpeech() {
-  if (!state.shown?.units.length) return false;
-  stopSpeech();
-  const sp = readInPlace(out, state.shown, { cursorRows: () => rl.getCursorPos().rows, rate: state.rate, voice: state.voice });
-  speech = sp;
-  sp.done.then(() => { if (speech === sp) speech = null; }, err => { if (speech === sp) { speech = null; tell(err.message); } });
-  return true;
-}
-const stopSpeech = () => { speech?.stop(); speech = null; };
-
-// Tab reads the last reply where it stands, or full screen once other output has moved it.
-function readTab() {
-  if (speech) return stopSpeech();
-  if (startSpeech()) return;
-  if (state.last) return readFull();
-  tell('nothing to read aloud yet');
-}
-
-async function readFull() {
-  if (!state.last) return note('nothing to read aloud yet');
-  stopSpeech();
-  const { rate } = await readerView(out, process.stdin, state.last, { rate: state.rate, voice: state.voice, width: width() });
-  if (rate !== state.rate) saveSettings({ rate: (state.rate = rate) });
+  v.end();
 }
 
 async function flagLast(msg) {
@@ -199,7 +235,7 @@ async function flagLast(msg) {
   const typed = msg.slice(1).trim() || (await nextLine(soft('  what tripped you? Enter to skip: '))).trim();
   const rules = await working(() => learn(ask, { reply: state.last, note: typed || undefined }));
   dropSession();
-  chatSession().warm();
+  warm();
   note(`learned. your profile has ${rules.length} rule${rules.length === 1 ? '' : 's'}. /profile to see them`);
 }
 
@@ -212,37 +248,34 @@ async function resumeChat() {
   const s = past[i];
   dropSession();
   state.sessionId = s.id;
-  // A session keeps the tools it started with, so going back can switch them.
-  if (s.tools != null && s.tools !== state.tools) {
-    state.tools = s.tools;
-    note(s.tools ? 'that chat had full access, so full access is on' : 'that chat was chat only, so tools are off');
-  }
-  chatSession().warm();
+  state.history = chatOf(s.id);
+  state.usage = null;
+  for (const line of backTo(s)) note(line);
+  warm();
   showLast(s);
 }
 
-// Back in an old chat, its last reply is shown again, ready for Tab.
+// Back in an old chat, its last reply is shown again.
 function showLast(s) {
   state.last = s.last.text;
   note(`back in: ${fit((s.first ?? '').replace(/\s+/g, ' '), 50)} (${s.turns} repl${s.turns === 1 ? 'y' : 'ies'}). the last one:`);
   out.write(soft(`  › ${fit(s.last.q.replace(/\s+/g, ' '), width())}`) + '\n\n');
   const v = view(l => out.write(l + '\n'));
   v.push(s.last.text);
-  const shown = v.end();
-  const tail = '\n' + soft('  tab reads it aloud') + '\n\n';
-  out.write(tail);
-  state.shown = { ...shown, below: 1 + newlines(tail) };
+  v.end();
+  out.write('\n');
 }
 
 // Both sides of a test run without tools: a fair race between two plain answers.
+// The thinking level stays out of it, because the test is about how the reply reads.
 async function readingTest() {
   const round = rows('tests.jsonl').length;
   const q = questionFor(round);
   out.write('\n');
   note(`reading test, round ${round + 1} of ${TARGET}: ${q}`);
   const [plain, reread] = await working(() => Promise.all([
-    ask(q, { system: PLAIN_SYSTEM, model: state.model }),
-    reply(ask, q, { system: system(false), model: state.model }),
+    side(q, { system: PLAIN_SYSTEM }),
+    reply(side, q, { system: system(false, 'off') }),
   ]));
   const text = { plain: plain.text, reread: reread.text };
   const seq = order(), ms = {};
@@ -272,31 +305,295 @@ const fresh = msg => {
   dropSession();
   state.sessionId = undefined;
   state.last = null;
-  chatSession().warm();
+  state.history = [];
+  state.usage = null;
+  warm();
   note(msg);
 };
 
+function helpScreen() {
+  const cols = (out.columns || 80) - 1, name = Math.max(...MENU.map(([n]) => n.length));
+  out.write('\n');
+  for (const [title, items] of GROUPS) {
+    out.write(`  ${fancy(out) ? heading(title) : title}\n`);
+    for (const [cmd, text] of items) out.write(`    ${cmd.padEnd(name)}  ${soft(fit(text, cols - name - 6))}\n`);
+    out.write('\n');
+  }
+  note('typos are fine: /clam runs /calm. press / then Enter for the arrow menu');
+}
+
+// The window in play: what the model reported after the last reply, else what the model list knows.
+const windowNow = () => contextWindow(state.model, { known: models(), reported: state.window });
+// Nothing reported the window, and the list has only Claude's documented 200k or nothing, and the
+// id does not say [1m]: then the size is a guess.
+function windowIsGuess() {
+  const listed = models().find(m => m.id === state.model);
+  return !state.window && !/\[1m\]/i.test(state.model ?? '') && (!listed?.contextWindow || listed.contextSource === 'documented default');
+}
+
+// A window a model reports replaces any guess. It is kept too, so the next launch starts right.
+function rememberWindow(window) {
+  if (!window || window === state.window) return;
+  state.window = window;
+  if (state.model) learnContextWindow(state.model, window);
+}
+
+function showContext() {
+  const window = windowNow();
+  const b = breakdown({ window, usage: state.usage, system: estimateTokens(system()) });
+  const paint = (i, s) => (fancy(out) ? [fg(grad(0.15), s), fg(grad(0.75), s), dim(s)][i] : s);
+  out.write(`\n  ${bar(barCounts(b.parts, window), paint)}  ${share(b.used, window)} used\n`);
+  const label = ['System prompt, about', 'Conversation', 'Free'];
+  show(table(b.parts.map(([, n], i) => [`${FILL[i]} ${label[i]}`, `${i === 0 ? '~' : ''}${count(n)}`, share(n, window)]), ['Part', 'Tokens', 'Share']));
+  note(`${count(b.used)} of ${count(window)} tokens. the system prompt is a guess: characters / 4.`);
+  if (!b.measured) note(state.history.length ? 'no token counts for this chat yet, so only the system prompt is counted.' : 'no reply yet, so only the system prompt is counted.');
+  if (windowIsGuess()) note(`the window size is a guess: ${count(window)}. a model that reports its window corrects it after a reply.`);
+  if (state.thinking === 'explorer') note('explorer: this is its last call, not a running chat.');
+  else if (state.tools) note("full access: Claude's own tools and prompt count under Conversation.");
+}
+
+function showStatus() {
+  const window = windowNow();
+  show(table([
+    ['Model', state.model ?? 'default'],
+    ['Thinking', state.thinking],
+    ['Tools', state.tools ? 'on' : 'off'],
+    ['Context', state.usage ? `${share(usedTokens(state.usage), window)} of ${count(window)}` : state.history.length ? 'not counted' : 'no reply yet'],
+    ['Session', state.sessionId ?? 'none yet'],
+    ['Voice', state.voice ? 'on' : 'off'],
+  ], ['Setting', 'Value'], { left: [1] }));
+}
+
+// A line of model ids that fits the screen. opencode alone can offer a hundred.
+const someModels = list => list.slice(0, 12).map(m => m.id).join(', ') + (list.length > 12 ? `, and ${list.length - 12} more` : '');
+
+// The picker, or a typed name, over every model Claude, grok and opencode offer. The list is a day
+// old at most, and `/model refresh` asks them again and says which could not be asked. A different
+// model starts a fresh session, because a session belongs to the model that began it. The chat
+// stays on screen. Full access is Claude's alone, so a model from another provider turns it off.
+async function pickModel(arg = '') {
+  const again = arg.toLowerCase() === 'refresh';
+  const { models: list, errors } = await working(async () => {
+    spinner?.status('asking Claude, grok and opencode what they offer');
+    return again ? refreshModels() : { models: await listModels(), errors: {} };
+  });
+  for (const [who, why] of Object.entries(errors)) note(`${who} could not be asked: ${fit(why.replace(/\s+/g, ' '), width() - 24)}`);
+  if (again) return note(`${list.length} models. /model lists them`);
+  let chosen;
+  if (arg) {
+    chosen = findModel(arg, list);
+    if (!chosen) return note(`no model "${arg}". these are the models: ${someModels(list)}`);
+    if (chosen.id.toLowerCase() !== arg.toLowerCase()) note(`${arg} → ${chosen.id}`);
+  } else if (!fancy(out)) {
+    return note(`models: ${someModels(list)}. type /model and a name`);
+  } else {
+    out.write('\n');
+    const i = await menu(out, process.stdin, list.map(m => [m.id, modelLine(m, state.model)]), { at: list.findIndex(m => m.id === state.model), nameMax: 40 });
+    if (i < 0) return note('menu closed');
+    chosen = list[i];
+  }
+  if (chosen.id === state.model) return note(`already on ${chosen.id}`);
+  state.model = chosen.id;
+  state.window = undefined;
+  saveSettings({ model: chosen.id });
+  if (state.tools && chosen.provider !== 'claude') {
+    state.tools = false;
+    note('full access works with Claude only, so tools are off');
+  }
+  fresh(`model: ${chosen.id}. fresh chat`);
+}
+
+async function pickThinking(arg) {
+  let level;
+  if (arg) {
+    level = resolve(arg.toLowerCase(), LEVEL_NAMES);
+    if (!level) return note(`no thinking level "${arg}". choose from: ${LEVEL_NAMES.join(', ')}`);
+    if (level !== arg.toLowerCase()) note(`${arg} → ${level}`);
+  } else if (!fancy(out)) {
+    return note(`thinking is ${state.thinking}. choose from: ${LEVEL_NAMES.join(', ')}`);
+  } else {
+    out.write('\n');
+    const i = await menu(out, process.stdin, LEVELS.map(([name, help]) => [name, name === state.thinking ? `${help} (now)` : help]), { at: LEVEL_NAMES.indexOf(state.thinking) });
+    if (i < 0) return note('menu closed');
+    level = LEVEL_NAMES[i];
+  }
+  if (level === state.thinking) return note(`thinking is already ${level}`);
+  state.thinking = level;
+  saveSettings({ thinking: level });
+  fresh(`thinking: ${level}. fresh chat`);
+  if (level === 'explorer' && state.tools) note('explorer works without tools, so it ignores full access');
+}
+
+// Summarizes the chat in the chat itself, which holds everything said, then moves to a fresh
+// session whose first turn is that summary. The old session stays as it was until the new one
+// has answered, so a failure on the way loses nothing.
+async function compact() {
+  if (state.thinking === 'explorer') return note('explorer only sends the last few turns, so there is nothing to compact');
+  if (!state.history.length) return note('nothing to compact yet. send a message first');
+  const before = state.usage ? usedTokens(state.usage) : null, old = chatSession();
+  let summarizing = true;
+  const done = await working(async () => {
+    spinner?.status('summarizing the chat');
+    const summary = await old.send(COMPACT_ASK);
+    if (summary.stopped) return null;
+    summarizing = false;
+    spinner?.status('starting fresh');
+    const next = open();
+    try {
+      return { summary: summary.text, next, turn: await next.send(carryPrompt(summary.text)) };
+    } catch (err) {
+      next.close();
+      throw err;
+    }
+  }, () => summarizing && old.interrupt());
+  if (!done) return note('stopped. the chat is as it was');
+  dropSession();
+  session = done.next;
+  state.sessionId = done.turn.sessionId;
+  state.usage = hasUsage(done.turn.usage) ? done.turn.usage : null;
+  rememberWindow(done.turn.contextWindow ?? done.turn.usage?.contextWindow);
+  note('kept in the summary:');
+  show(done.summary);
+  show(table([['Before', before == null ? 'unknown' : count(before)], ['After', state.usage ? count(usedTokens(state.usage)) : 'unknown']], ['Context', 'Tokens']));
+}
+
+// A goal becomes a short plan: one tiny first action, then steps of at most 25 minutes.
+// Alone, /plan shows the newest saved plan, and only makes one from the last message when
+// there is none yet. `/plan last` makes one from the last message.
+async function studyPlan(arg = '') {
+  let goal = /^(this|last)$/i.test(arg) ? state.history.at(-1)?.q : arg;
+  if (!goal) {
+    const newest = latestFile('plans');
+    if (newest) { show(newest.text); return note(`saved: ${newest.path}`); }
+    goal = state.history.at(-1)?.q;
+    if (!goal) return note('no plan yet. type /plan and what you want to learn');
+  }
+  const ctl = new AbortController();
+  let made;
+  try {
+    made = await working(() => side(planPrompt(goal), { system: PLAN_SYSTEM, signal: ctl.signal }), () => { ctl.abort(); return true; });
+  } catch (err) {
+    if (err.name === 'AbortError') return note('stopped');
+    throw err;
+  }
+  const plan = parsePlan(made.text, goal.slice(0, 80));
+  const text = planMarkdown(plan, today());
+  const path = saveFile('plans', `${today()}-${slug(plan.goal)}`, text);
+  show(text);
+  note(`saved: ${path}`);
+}
+
+function exportChat() {
+  if (!state.history.length) return note('nothing to export yet');
+  const text = chatMarkdown(state.history, { date: today(), model: state.model, thinking: state.thinking, session: state.sessionId });
+  note(`saved: ${saveFile('exports', `${today()}-${slug(state.history[0].q)}`, text)}`);
+}
+
+async function copyLast() {
+  if (!state.last) return note('nothing to copy yet');
+  await copy(state.last);
+  note(`copied the last reply (${words(state.last)} words)`);
+}
+
+// The voice chat's text can arrive at any moment, so it is written over the prompt line and the
+// prompt is drawn again under it, with whatever was being typed. While a typed reply is being
+// written, it is the waiting line that goes back under the text, as it does for the reply itself.
+const aside = write => {
+  if (rl.closed) return;
+  out.write(`\r${ESC}2K`);
+  write();
+  if (busy) spinner?.redraw();
+  else rl.prompt(true);
+};
+
+// ChatGPT voice is its own chat, beside the typed one: the microphone goes to OpenAI, the reply is
+// spoken and shown here, and each exchange joins the chat for /export and /copy. Typed messages
+// still go to the model chosen with /model.
+function voiceChat() {
+  // Stopping reports through onEnd below, which says it is off.
+  if (voice) return voice.stop();
+  const key = openaiKey();
+  if (!key) return note(NO_KEY);
+  let reply = null;
+  voice = openVoice({
+    key,
+    screen: {
+      user: text => aside(() => out.write(soft(`  you said: ${fit(text.replace(/\s+/g, ' '), width())}`) + '\n\n')),
+      reply: (delta, done) => {
+        if (delta) {
+          if (!reply) {
+            aside(() => out.write('\n'));
+            reply = view(line => aside(() => out.write(line + '\n')));
+          }
+          reply.push(delta);
+        }
+        if (done && reply) {
+          reply.end();
+          reply = null;
+          aside(() => out.write('\n'));
+        }
+      },
+      note: text => aside(() => out.write(soft(`  ${text}`) + '\n\n')),
+      problem: text => aside(() => out.write(`  \x1b[31m${text}\x1b[0m\n\n`)),
+    },
+    onTurn: turn => {
+      state.history.push(turn);
+      state.last = turn.text;
+    },
+    onEnd: () => {
+      voice = null;
+      state.voice = false;
+      if (!leaving) aside(() => out.write(soft('  voice off') + '\n\n'));
+    },
+  });
+  state.voice = true;
+}
+
+// Reads a line with the letters hidden on a terminal. A pipe shows nothing anyway.
+const readSecret = q => (process.stdin.isTTY ? secret(out, process.stdin, soft(q)) : nextLine(q));
+
+// The key is asked for with the letters hidden, so it never shows on the screen or in the
+// scroll-back, and it goes straight to the Keychain. It is never written to a file of ours, and
+// typing it after the command would put it on screen, so that is refused.
+async function setKey(arg) {
+  if (arg) return note('type /key alone. it asks for the key with the letters hidden, so the key never shows on the screen');
+  const typed = ((await readSecret('  OpenAI key (hidden. Enter saves, Esc cancels): ')) ?? '').trim();
+  if (!typed) return note('no key saved');
+  if (/\s/.test(typed) || typed.length < 20) return note('that does not look like an OpenAI key, so nothing was saved. a key is one long word');
+  saveOpenaiKey(typed);
+  note(`saved in your Mac's Keychain. /voice starts ChatGPT voice${process.env.OPENAI_API_KEY?.trim() ? '. OPENAI_API_KEY is set in this shell and is used first' : ''}`);
+}
+
 const commands = {
   '!': () => flagLast('!'),
-  '/read': readFull,
-  '/voice': () => {
-    saveSettings({ aloud: (state.aloud = !state.aloud) });
-    note(state.aloud ? 'voice on: every reply is read aloud. esc stops it' : 'voice off. tab still reads one reply');
-  },
-  '/resume': resumeChat,
+  '/help': helpScreen,
   '/new': () => fresh('fresh chat'),
-  '/test': readingTest,
-  '/stats': () => show(table(summarize({ chats: rows('chats.jsonl'), tests: rows('tests.jsonl'), flags: rows('flags.jsonl') }))),
-  '/profile': () => (readProfile() ? show(readProfile()) : note('no rules yet. type ! after a reply that tripped you')),
+  '/clear': () => fresh('fresh chat'),
+  '/resume': resumeChat,
+  '/compact': compact,
+  '/plan': studyPlan,
+  '/export': exportChat,
+  '/copy': copyLast,
+  '/model': pickModel,
+  '/think': pickThinking,
+  '/context': showContext,
+  '/status': showStatus,
   // A session that used tools can't carry on without them, so switching starts a fresh chat.
+  // Full access is Claude's alone.
   '/tools': () => {
+    if (!state.tools && providerOf(state.model) !== 'claude') return note(`full access works with Claude only, not ${state.model}. /model picks a Claude model first`);
     state.tools = !state.tools;
     fresh(state.tools ? 'full access on. fresh chat' : 'tools off, chat only. fresh chat');
   },
+  '/test': readingTest,
+  '/stats': () => show(table(summarize({ chats: rows('chats.jsonl'), tests: rows('tests.jsonl'), flags: rows('flags.jsonl') }))),
+  '/profile': () => (readProfile() ? show(readProfile()) : note('no rules yet. type ! after a reply that tripped you')),
   '/color': () => { nextPalette(); rl.setPrompt(promptGlyph(out)); out.write('\n' + swatch(palette()) + '\n\n'); },
   '/brain': () => brainScreen(out, nextLine(''), 'press Enter to go back'),
   '/calm': () => note(`motion ${(state.calm = !state.calm) ? 'off' : 'on'}`),
   '/pliny': () => note(`pliny mode ${(state.pliny = !state.pliny) ? 'on: 7h3 0n3 7ru3 l33t' : 'off'}`),
+  '/voice': voiceChat,
+  '/key': setKey,
   '/exit': () => rl.close(),
 };
 
@@ -306,11 +603,11 @@ async function command(msg) {
     const i = await menu(out, process.stdin, MENU);
     return i < 0 ? note('menu closed') : commands[MENU[i][0]]();
   }
-  const typed = msg.split(/\s+/)[0].toLowerCase();
+  const word = msg.split(/\s+/)[0], typed = word.toLowerCase();
   const name = resolve(typed, Object.keys(commands).filter(n => n !== '!'));
   if (!name) return note(`no command "${typed}". press / then Enter for the menu`);
   if (name !== typed) note(`${typed} → ${name}`);
-  return commands[name]();
+  return commands[name](msg.slice(word.length).trim());
 }
 
 // Lines that arrive in one burst (a paste) become one message, unless the burst starts with a
@@ -318,8 +615,6 @@ async function command(msg) {
 // one burst: no one types two lines that fast.
 let queue = [], draining = false, burstTimer = null;
 rl.on('line', line => {
-  // Enter moves the prompt down a row, and the last reply up one with it.
-  if (state.shown) state.shown.below += 1;
   if (waiter) { const w = waiter; waiter = null; return w(line); }
   queue.push(line);
   if (draining) return;
@@ -335,10 +630,6 @@ async function drain() {
     const msgs = /^[/!]/.test(first) ? burst.map(l => l.trim()) : [burst.join('\n').trim()];
     for (const msg of msgs) {
       if (!msg) continue;
-      // Anything written now moves the last reply, so in-place reading stops and Tab falls
-      // back to the full-screen reader.
-      stopSpeech();
-      state.shown = null;
       try {
         if (msg.startsWith('!')) await flagLast(msg);
         else if (msg.startsWith('/')) await command(msg);

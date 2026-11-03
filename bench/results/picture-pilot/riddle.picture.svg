@@ -1,0 +1,46 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 800" width="800" height="800">
+  <rect x="0" y="0" width="800" height="800" fill="#ffffff"/>
+
+  <!-- Step 1: start word, 5 letters -->
+  <text x="400" y="50" font-family="Arial, sans-serif" font-size="28" font-weight="bold" text-anchor="middle" fill="#222">1. Start word</text>
+  <text x="400" y="88" font-family="Arial, sans-serif" font-size="22" text-anchor="middle" fill="#444">5 letters</text>
+  <g font-family="Arial, sans-serif" font-size="44" text-anchor="middle" fill="#222">
+    <rect x="176" y="110" width="80" height="90" fill="#dbeafe" stroke="#1e40af" stroke-width="3"/>
+    <text x="216" y="172">?</text>
+    <rect x="268" y="110" width="80" height="90" fill="#dbeafe" stroke="#1e40af" stroke-width="3"/>
+    <text x="308" y="172">?</text>
+    <rect x="360" y="110" width="80" height="90" fill="#dbeafe" stroke="#1e40af" stroke-width="3"/>
+    <text x="400" y="172">?</text>
+    <rect x="452" y="110" width="80" height="90" fill="#dbeafe" stroke="#1e40af" stroke-width="3"/>
+    <text x="492" y="172">?</text>
+    <rect x="544" y="110" width="80" height="90" fill="#dbeafe" stroke="#1e40af" stroke-width="3"/>
+    <text x="584" y="172">?</text>
+  </g>
+
+  <!-- Arrow with step 2 -->
+  <line x1="400" y1="215" x2="400" y2="265" stroke="#333" stroke-width="5"/>
+  <polygon points="380,262 420,262 400,292" fill="#333"/>
+  <text x="400" y="250" font-family="Arial, sans-serif" font-size="24" text-anchor="start" fill="#333" dx="20">2. Add</text>
+
+  <!-- Step 2: add two letters -->
+  <text x="400" y="330" font-family="Arial, sans-serif" font-size="28" font-weight="bold" text-anchor="middle" fill="#222">+ 2 letters</text>
+  <g font-family="Arial, sans-serif" font-size="44" text-anchor="middle" fill="#222">
+    <rect x="300" y="350" width="80" height="90" fill="#fde68a" stroke="#b45309" stroke-width="3"/>
+    <text x="340" y="412">?</text>
+    <rect x="420" y="350" width="80" height="90" fill="#fde68a" stroke="#b45309" stroke-width="3"/>
+    <text x="460" y="412">?</text>
+  </g>
+
+  <!-- Arrow with step 3 -->
+  <line x1="400" y1="460" x2="400" y2="510" stroke="#333" stroke-width="5"/>
+  <polygon points="380,507 420,507 400,537" fill="#333"/>
+  <text x="400" y="495" font-family="Arial, sans-serif" font-size="24" text-anchor="start" fill="#333" dx="20">3. Result</text>
+
+  <!-- Step 3: result becomes shorter -->
+  <rect x="200" y="550" width="400" height="110" rx="14" fill="#dcfce7" stroke="#15803d" stroke-width="4"/>
+  <text x="400" y="600" font-family="Arial, sans-serif" font-size="26" font-weight="bold" text-anchor="middle" fill="#14532d">Becomes shorter</text>
+  <text x="400" y="638" font-family="Arial, sans-serif" font-size="22" text-anchor="middle" fill="#14532d">Length goes DOWN</text>
+
+  <!-- Question prompt -->
+  <text x="400" y="735" font-family="Arial, sans-serif" font-size="24" font-weight="bold" text-anchor="middle" fill="#7c2d12">Which word fits?</text>
+</svg>
