@@ -51,10 +51,15 @@ test('ask talks to the CLI over stream-json with tools and user settings off', a
   const log = join(mkdtempSync(join(tmpdir(), 'dm-')), 'argv');
   process.env.FAKE_LOG = log;
   const r = await ask('-starts with a dash', { system: 'SYS', sessionId: 'old', model: 'haiku', bin: FAKE });
-  assert.deepEqual(r, { text: 'echo: -starts with a dash', sessionId: 'sess-1' });
+  assert.deepEqual(r, {
+    text: 'echo: -starts with a dash',
+    sessionId: 'sess-1',
+    usage: { input_tokens: 3, cache_read_input_tokens: 0, cache_creation_input_tokens: 3005, output_tokens: 7 },
+  });
   const { argv, bridge } = launch(log);
   for (const pair of [['--tools', ''], ['--setting-sources', ''], ['--system-prompt', 'SYS'], ['--resume', 'old'], ['--model', 'haiku']])
     assert.equal(argv[argv.indexOf(pair[0]) + 1], pair[1], pair[0]);
+  assert.ok(argv.includes('--strict-mcp-config'));
   assert.equal(bridge, '1');
 });
 
@@ -66,7 +71,7 @@ test('full access keeps user settings, appends the prompt, runs from home and re
   const { argv, bridge, cwd } = launch(log);
   assert.equal(argv[argv.indexOf('--permission-mode') + 1], 'bypassPermissions');
   assert.equal(argv[argv.indexOf('--append-system-prompt') + 1], 'SYS');
-  assert.ok(!argv.includes('--tools') && !argv.includes('--setting-sources') && !argv.includes('--system-prompt'));
+  assert.ok(!argv.includes('--tools') && !argv.includes('--setting-sources') && !argv.includes('--system-prompt') && !argv.includes('--strict-mcp-config'));
   assert.equal(bridge, '1');
   assert.equal(realpathSync(cwd), realpathSync(homedir()));
   assert.deepEqual(seen, ['running: ls ~/dev']);

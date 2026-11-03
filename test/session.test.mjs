@@ -22,7 +22,7 @@ test('one process serves every turn, and text streams in as it is written', asyn
   const s = open();
   const parts = [];
   const a = await s.send('hello there', { onText: t => parts.push(t) });
-  assert.deepEqual(a, { text: 'echo: hello there', sessionId: 'sess-1' });
+  assert.deepEqual(a, { text: 'echo: hello there', sessionId: 'sess-1', usage: { input_tokens: 3, cache_read_input_tokens: 0, cache_creation_input_tokens: 3003, output_tokens: 5 } });
   assert.ok(parts.length > 1, 'more than one piece');
   assert.equal(parts.join(''), 'echo: hello there');
   const b = await s.send('-and again');
@@ -39,6 +39,7 @@ test('the chat process reads turns as stream-json and runs plain chat from the d
   for (const pair of [['--input-format', 'stream-json'], ['--output-format', 'stream-json'], ['--tools', ''], ['--system-prompt', 'SYS']])
     assert.equal(argv[argv.indexOf(pair[0]) + 1], pair[1], pair[0]);
   assert.ok(argv.includes('--include-partial-messages'));
+  assert.ok(argv.includes('--strict-mcp-config'), 'a chat with no tools carries no MCP tool definitions');
   assert.equal(bridge, '1');
   // Always the same folder, so the session can be resumed from anywhere later.
   assert.equal(realpathSync(cwd), realpathSync(process.env.DYSLEXIC_MODE_HOME));

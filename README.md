@@ -10,8 +10,9 @@
 </p>
 
 - Short lines. Plain words. One idea per sentence.
-- Tab reads any reply aloud and lights up each word as it is said.
 - Type `!` after a reply that tripped you. It learns a rule from it.
+- `/think` changes how the model thinks, so you can test what a dyslexic way of thinking does.
+- `/help` lists every command. A typo still works: `/clam` runs `/calm`.
 - No API key. It runs on the `claude` CLI you already have.
 
 ## Run it
@@ -24,8 +25,7 @@ Or clone it and run `node bin/dyslexic-mode.mjs`.
 
 You need Node 20+ and the `claude` CLI, logged in.
 There are no packages to install.
-Read aloud uses `say`, which comes with macOS.
-Built and tested on macOS.
+Built and tested on macOS. `/copy` uses `pbcopy`, which comes with it.
 
 `-c` goes back to your last chat.
 
@@ -48,56 +48,98 @@ The two pictures above are real recordings of the app.
 
 | Key | What it does |
 |-----|--------------|
-| Tab | reads the last reply aloud. Tab again stops it |
-| Esc | stops a reply while it is being written, or stops the voice |
-| `/` then Enter | opens the menu |
+| Esc | stops a reply while it is being written |
+| `/` then Enter | opens the menu. Up and down move, a number jumps, Enter picks |
 | `!` | flags the last reply as hard to read |
 
 Keys you type while a reply is coming in wait for the prompt.
 
 ## Commands
 
+`/help` shows this list in the app.
 Typed commands forgive slips: `/clam` runs `/calm`.
+Two commands that start the same way, like `/co`, are never guessed.
 
 | Command | What it does |
 |---------|--------------|
-| `/read` | reads the last reply aloud, full screen |
-| `/voice` | reads every reply aloud, on or off |
-| `/resume` | goes back to an old chat |
+| `/help` | every command, grouped |
 | `/new` | starts a fresh chat |
+| `/clear` | the same as `/new` |
+| `/resume` | goes back to an old chat |
+| `/compact` | shrinks the chat to a summary and carries on from it |
+| `/plan <goal>` | turns a goal into a study plan, saves it, prints the path |
+| `/plan` | shows your latest plan |
+| `/export` | saves the chat as a markdown file, prints the path |
+| `/copy` | copies the last reply |
+| `/model` | picks the model with the arrow keys. `/model opus` types it |
+| `/think` | picks how the model thinks |
+| `/context` | shows how full the context window is |
+| `/status` | model, thinking, tools, context, session, voice |
+| `/tools` | turns full access on or off |
 | `/test` | runs one round of the blind reading test |
 | `/stats` | shows the numbers |
 | `/profile` | shows the rules it learned from your flags |
-| `/tools` | turns full access on or off |
 | `/color` | switches to the next color set |
 | `/brain` | shows a big spinning 3D brain |
 | `/calm` | turns motion off |
 | `/pliny` | l33t replies with dividers |
+| `/voice` | ChatGPT voice. It is being wired in |
 | `/exit` | quits |
 
-## Read aloud
+## Model
 
-Tab reads the reply right where it is.
-The word being said lights up, so your eyes and ears stay together.
+`/model` opens a list of models. Up and down move, Enter picks.
+`/model haiku` picks one by name. A slip like `/model hiaku` works too.
 
-`/read` opens a full-screen reader.
-The paragraph being read stays bright. The rest fades back.
+A new model starts a fresh session, because a session belongs to the model that began it.
+The chat stays on screen. The choice is kept for next time.
+`--model haiku` is for one launch only.
 
-| Key in the reader | What it does |
-|-------------------|--------------|
-| Space | pause or play |
-| ← → | back or on one paragraph |
-| - + | slower or faster |
-| Esc | back to the chat |
+## Thinking
 
-Step numbers are read out. Code and links are not.
-Table rows are read cell by cell, with a short pause between.
+`/think` sets how the model thinks. It is kept for next time.
+Changing it starts a fresh session.
 
-The speed you pick is kept for next time.
-`--rate 200` sets it.
+| Level | What it does |
+|-------|--------------|
+| `off` | no special thinking |
+| `dyslexic` | big picture first, details last |
+| `strong` | writes out a picture, three ways in, and a pattern |
+| `extreme` | thinks in sketches, not sentences |
+| `explorer` | three drafts at once, then one answer that weighs them |
 
-`--voice Daniel` picks a voice.
-`say -v '?'` lists the voices on your Mac.
+The first four are written into the system prompt.
+
+Explorer is different. Each message makes four calls:
+a draft by picture, a draft by pattern, a draft as a story, all at once,
+then one call that weighs them.
+It costs four times the calls. It works without tools.
+Each call carries the last three turns as text, so it remembers the chat.
+The status line says `exploring 3 ways`.
+
+## Context
+
+`/context` draws the context window as a bar, then splits it in columns:
+the system prompt, the conversation, and what is free.
+
+- The conversation and the total come from what Claude reported for the last reply.
+- The system prompt is a guess: its characters divided by 4. It is marked `about`.
+- The window size is what Claude reports. A model id with `[1m]` counts as 1M, else 200k.
+
+`/compact` asks the chat for a summary of itself,
+then starts a fresh session whose first message is that summary.
+It shows the tokens before and after.
+
+## Plans and exports
+
+`/plan learn the basics of chess` asks the model for a plan.
+It gets one very small first action, under 2 minutes,
+then steps of at most 25 minutes each. A longer step is split into equal parts.
+You get a checklist with a time box on each line.
+
+Plans are saved in `~/.dyslexic-mode/plans/` as `<date>-<topic>.md`.
+Chats from `/export` go in `~/.dyslexic-mode/exports/`.
+A second file with the same name gets `-2`. Nothing is overwritten.
 
 ## How a reply is made
 
@@ -154,7 +196,7 @@ There are 7: neon, fire, ocean, toxic, sunset, candy, aurora.
 3. Your profile goes into every prompt after that.
 
 Your data stays in `~/.dyslexic-mode/`, not in this repo.
-That folder holds your chats, flags, test rounds, profile and settings.
+That folder holds your chats, flags, test rounds, profile, settings, plans and exports.
 
 ## The reading test
 
@@ -177,8 +219,8 @@ Code, paths and links stay untouched in Pliny mode.
 npm test
 ```
 
-The tests use a fake `claude` and a fake `say`.
-So they make no real calls and play no sound.
+The tests use a fake `claude` and a fake `pbcopy`.
+So they make no real calls and never touch your clipboard.
 
 ## The skill
 
