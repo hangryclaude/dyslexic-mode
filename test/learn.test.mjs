@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { mkdtempSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { append, rows, readProfile, writeProfile } from '../lib/store.mjs';
+import { append, rows, readProfile, writeProfile, readSettings, saveSettings, sessions } from '../lib/store.mjs';
 import { learn, distillPrompt } from '../lib/learn.mjs';
 import { summarize, table } from '../lib/stats.mjs';
 import { QUESTIONS, questionFor, order, pickOf, words } from '../lib/readtest.mjs';
@@ -83,4 +83,28 @@ test('reading test helpers: question order, blind order, picks, word count', () 
   assert.equal(pickOf('2', ['plain', 'reread']), 'reread');
   assert.equal(pickOf('s', ['plain', 'reread']), 'same');
   assert.equal(words(' two  words\n'), 2);
+});
+
+test('settings outlast a launch and merge instead of replacing', () => {
+  assert.deepEqual(readSettings(), {});
+  saveSettings({ aloud: true });
+  saveSettings({ rate: 200 });
+  assert.deepEqual(readSettings(), { aloud: true, rate: 200 });
+});
+
+test('past chats group by session, newest first, with the first question and the last reply', () => {
+  const chats = [
+    { ts: 1, q: 'old row from before sessions were logged' },
+    { ts: 2, session: 'a', q: 'how do backups work', text: 'r1', tools: true },
+    { ts: 3, session: 'b', q: 'what is a neuron', text: 'r2', tools: false },
+    { ts: 4, session: 'a', q: 'and the cost?', text: 'r3', tools: true },
+  ];
+  const s = sessions(chats);
+  assert.deepEqual(s.map(x => x.id), ['a', 'b']);
+  assert.deepEqual(s[0], { id: 'a', first: 'how do backups work', tools: true, turns: 2, ts: 4, last: { q: 'and the cost?', text: 'r3' } });
+});
+
+test('summarize reports how fast the first line shows', () => {
+  const s = Object.fromEntries(summarize({ chats: [{ first: 900 }, { first: 1500 }, {}], tests: [], flags: [] }));
+  assert.equal(s['First line shown'], '1.2s');
 });

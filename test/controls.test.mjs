@@ -23,6 +23,13 @@ test('typed commands forgive slips but never guess between two', () => {
   assert.equal(resolve('/zzzzzz', NAMES_TYPED), null);
 });
 
+test('the read-aloud commands forgive slips too, and never guess between /read and /resume', () => {
+  assert.equal(resolve('/raed', NAMES_TYPED), '/read');
+  assert.equal(resolve('/voic', NAMES_TYPED), '/voice');
+  assert.equal(resolve('/reusme', NAMES_TYPED), '/resume');
+  assert.equal(resolve('/re', NAMES_TYPED), null);
+});
+
 test('the menu covers every command once, with the flag first', () => {
   assert.equal(MENU[0][0], '!');
   assert.equal(new Set(MENU.map(([n]) => n)).size, MENU.length);
