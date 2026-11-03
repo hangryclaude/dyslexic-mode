@@ -7,7 +7,8 @@
   "scripts": {
     "start": "node bin/dyslexic-mode.mjs",
     "brain": "node bin/brain.mjs",
-    "test": "node --test test/ skill/scripts/"
+    "test": "node --test test/ skill/scripts/",
+    "check-secrets": "if command -v gitleaks >/dev/null 2>&1; then gitleaks detect --no-banner; else node --test test/secrets.test.mjs; fi"
   },
   "engines": { "node": ">=20" },
   "license": "MIT"
