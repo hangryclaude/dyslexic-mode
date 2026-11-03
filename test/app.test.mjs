@@ -1,36 +1,9 @@
-import { test, after } from 'node:test';
+import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { spawn } from 'node:child_process';
 import { mkdtempSync, readFileSync, existsSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { fileURLToPath } from 'node:url';
-
-const APP = fileURLToPath(new URL('../bin/dyslexic-mode.mjs', import.meta.url));
-const FAKE = fileURLToPath(new URL('./fixtures/fake-claude.mjs', import.meta.url));
-const wait = ms => new Promise(r => setTimeout(r, ms));
-// A failed check leaves its app running, and a live child keeps the test file from ending.
-const children = new Set();
-after(() => { for (const c of children) c.kill(); });
-
-// The whole app with piped input and a fake claude. Lines go in one at a time, each after
-// the output it waits for, the way a person would type them.
-function run(args, home, log) {
-  const child = spawn(process.execPath, [APP, '--calm', '--no-tools', ...args], {
-    env: { ...process.env, DYSLEXIC_CLAUDE_BIN: FAKE, DYSLEXIC_MODE_HOME: home, FAKE_LOG: log, NO_COLOR: '1' },
-  });
-  children.add(child);
-  child.on('close', () => children.delete(child));
-  let out = '';
-  child.stdout.on('data', d => { out += d; });
-  child.stderr.on('data', d => { out += d; });
-  const until = async re => {
-    for (let i = 0; i < 300 && !re.test(out); i++) await wait(20);
-    assert.match(out, re);
-  };
-  const closed = new Promise(r => child.on('close', r));
-  return { type: line => child.stdin.write(line + '\n'), until, closed, out: () => out };
-}
+import { run } from './fixtures/app.mjs';
 
 test('a chat streams its reply, logs it, and the numbers show in a table', async () => {
   const dir = mkdtempSync(join(tmpdir(), 'dm-app-')), home = join(dir, 'home'), log = join(dir, 'argv');
@@ -45,6 +18,7 @@ test('a chat streams its reply, logs it, and the numbers show in a table', async
   assert.equal(row.session, 'sess-1');
   assert.equal(row.q, 'hello there');
   assert.equal(row.text, 'echo: hello there');
+  assert.equal(row.thinking, 'off');
   assert.ok(row.first >= 0 && row.ms >= row.first);
   const launches = readFileSync(log, 'utf8').trim().split('\n').map(l => JSON.parse(l));
   assert.equal(launches.length, 1, 'one claude process for the whole chat');
@@ -86,4 +60,14 @@ test('a typo runs the command it meant, and an unknown one points at the menu', 
   app.type('/exit');
   await app.closed;
   assert.ok(!existsSync(join(home, 'chats.jsonl')), 'no chat happened');
+});
+
+test('reading aloud is gone: /read is not a command and nothing on screen mentions it', async () => {
+  const dir = mkdtempSync(join(tmpdir(), 'dm-app-')), home = join(dir, 'home');
+  const app = run([], home, join(dir, 'argv'));
+  app.type('/read');
+  await app.until(/no command "\/read"/);
+  app.type('/exit');
+  await app.closed;
+  assert.doesNotMatch(app.out(), /aloud|\btab\b/i);
 });

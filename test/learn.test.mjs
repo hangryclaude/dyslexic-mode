@@ -87,9 +87,9 @@ test('reading test helpers: question order, blind order, picks, word count', () 
 
 test('settings outlast a launch and merge instead of replacing', () => {
   assert.deepEqual(readSettings(), {});
-  saveSettings({ aloud: true });
-  saveSettings({ rate: 200 });
-  assert.deepEqual(readSettings(), { aloud: true, rate: 200 });
+  saveSettings({ model: 'haiku' });
+  saveSettings({ thinking: 'strong' });
+  assert.deepEqual(readSettings(), { model: 'haiku', thinking: 'strong' });
 });
 
 test('past chats group by session, newest first, with the first question and the last reply', () => {
