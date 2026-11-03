@@ -1,10 +1,10 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { readFileSync, mkdtempSync } from 'node:fs';
-import { tmpdir } from 'node:os';
+import { readFileSync, mkdtempSync, realpathSync } from 'node:fs';
+import { tmpdir, homedir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { ask } from '../lib/claude.mjs';
+import { ask, toolLine } from '../lib/claude.mjs';
 import { reply } from '../lib/filter.mjs';
 import { systemPrompt, rewritePrompt } from '../lib/prompt.mjs';
 import { leet, plinyfy, DIVIDER } from '../lib/pliny.mjs';
@@ -27,10 +27,16 @@ test('plinyfy wraps the reply in dividers', () => {
 });
 
 test('system prompt carries the skill body, not its frontmatter', () => {
-  const s = systemPrompt('---\nname: x\n---\n# Pass\nrule one');
+  const s = systemPrompt({ skillMd: '---\nname: x\n---\n# Pass\nrule one' });
   assert.match(s, /rule one/);
   assert.doesNotMatch(s, /name: x/);
   assert.match(systemPrompt(), /The pass, part 1/);
+});
+
+test('system prompt adds the reader profile last, and only when there is one', () => {
+  assert.doesNotMatch(systemPrompt({ skillMd: 'x' }), /own rules/);
+  const s = systemPrompt({ skillMd: 'x', profile: '- keep tables to two columns' });
+  assert.match(s, /own rules[\s\S]*- keep tables to two columns$/);
 });
 
 test('rewrite prompt lists each hard hit and the draft', () => {
@@ -39,18 +45,51 @@ test('rewrite prompt lists each hard hit and the draft', () => {
   assert.match(s, /<reply>\ndraft text\n<\/reply>/);
 });
 
+const launch = log => JSON.parse(readFileSync(log, 'utf8').trim().split('\n').pop());
+
 test('ask talks to the CLI over stream-json with tools and user settings off', async () => {
   const log = join(mkdtempSync(join(tmpdir(), 'dm-')), 'argv');
   process.env.FAKE_LOG = log;
   const r = await ask('-starts with a dash', { system: 'SYS', sessionId: 'old', model: 'haiku', bin: FAKE });
   assert.deepEqual(r, { text: 'echo: -starts with a dash', sessionId: 'sess-1' });
-  const argv = JSON.parse(readFileSync(log, 'utf8'));
+  const { argv, bridge } = launch(log);
   for (const pair of [['--tools', ''], ['--setting-sources', ''], ['--system-prompt', 'SYS'], ['--resume', 'old'], ['--model', 'haiku']])
     assert.equal(argv[argv.indexOf(pair[0]) + 1], pair[1], pair[0]);
+  assert.equal(bridge, '1');
+});
+
+test('full access keeps user settings, appends the prompt, runs from home and reports tools', async () => {
+  const log = join(mkdtempSync(join(tmpdir(), 'dm-')), 'argv');
+  process.env.FAKE_LOG = log;
+  const seen = [];
+  await ask('TOOL please', { system: 'SYS', tools: true, onTool: b => seen.push(toolLine(b)), bin: FAKE });
+  const { argv, bridge, cwd } = launch(log);
+  assert.equal(argv[argv.indexOf('--permission-mode') + 1], 'bypassPermissions');
+  assert.equal(argv[argv.indexOf('--append-system-prompt') + 1], 'SYS');
+  assert.ok(!argv.includes('--tools') && !argv.includes('--setting-sources') && !argv.includes('--system-prompt'));
+  assert.equal(bridge, '1');
+  assert.equal(realpathSync(cwd), realpathSync(homedir()));
+  assert.deepEqual(seen, ['running: ls ~/dev']);
+});
+
+test('toolLine names tool calls in plain words', () => {
+  assert.equal(toolLine({ name: 'Bash', input: { command: 'codex exec "check\n this"' } }), 'asking Codex: codex exec "check this"');
+  assert.equal(toolLine({ name: 'Read', input: { file_path: '/a/b.md' } }), 'reading: /a/b.md');
+  assert.equal(toolLine({ name: 'WebSearch', input: { query: 'brains' } }), 'searching the web: brains');
+  assert.equal(toolLine({ name: 'Mystery' }), 'Mystery');
+});
+
+test('system prompt says what access the chat has', () => {
+  assert.match(systemPrompt({ skillMd: 'x', tools: true }), /full access[\s\S]*codex exec/);
+  assert.match(systemPrompt({ skillMd: 'x' }), /no tools/);
 });
 
 test('ask rejects on an error result', async () => {
   await assert.rejects(ask('FAIL now', { system: 's', bin: FAKE }), /boom/);
+});
+
+test('odd output fails the turn instead of crashing the chat', async () => {
+  await assert.rejects(ask('GARBAGE in', { system: 's', bin: FAKE }), /unexpected output from claude/);
 });
 
 test('reply keeps a clean answer without a rewrite', async () => {
@@ -59,6 +98,15 @@ test('reply keeps a clean answer without a rewrite', async () => {
   const r = await reply(fake, 'hi', {});
   assert.equal(calls.length, 1);
   assert.deepEqual({ rewrites: r.rewrites, hard: r.hard }, { rewrites: 0, hard: 0 });
+});
+
+test('long raw lines do not force a rewrite, because the renderer wraps them', async () => {
+  const wide = 'The cat sat on the mat and the dog ran to the park to see the big red ball by the old tree.';
+  assert.ok(wide.length > 80);
+  let calls = 0;
+  const r = await reply(async () => { calls++; return { text: wide, sessionId: 's' }; }, 'hi', {});
+  assert.equal(calls, 1);
+  assert.equal(r.rewrites, 0);
 });
 
 test('reply rewrites once on a hard hit, and never twice', async () => {

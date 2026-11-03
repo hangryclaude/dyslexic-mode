@@ -6,6 +6,7 @@
   "bin": { "dyslexic-mode": "bin/dyslexic-mode.mjs" },
   "scripts": {
     "start": "node bin/dyslexic-mode.mjs",
+    "brain": "node bin/brain.mjs",
     "test": "node --test test/ skill/scripts/"
   },
   "engines": { "node": ">=20" },
