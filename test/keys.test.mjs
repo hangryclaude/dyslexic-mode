@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { openaiKey, saveOpenaiKey } from '../lib/keys.mjs';
+import { openaiKey, saveOpenaiKey, keyFor, saveKey } from '../lib/keys.mjs';
 
 // Not a credential. The tests only check where it goes and that it never leaks.
 const KEY = 'FAKE-KEY-FOR-TESTS';
@@ -63,4 +63,21 @@ test('reading and saving print nothing', () => {
     Object.assign(console, saved);
   }
   assert.deepEqual(printed, []);
+});
+
+test('every service has its own key: its environment name first, then its own Keychain item', () => {
+  const poe = { id: 'poe', env: 'POE_API_KEY' };
+  const run = fakeSecurity({ status: 0, stdout: `${KEY}\n` });
+  assert.equal(keyFor(poe, { env: { POE_API_KEY: KEY, OPENAI_API_KEY: 'not this one' }, run }), KEY);
+  assert.equal(run.calls.length, 0);
+  assert.equal(keyFor(poe, { env: { OPENAI_API_KEY: 'not this one' }, run }), KEY);
+  assert.deepEqual(run.calls[0].args, ['find-generic-password', '-s', 'dyslexic-mode', '-a', 'poe', '-w']);
+  // A local server like Ollama has no environment name, so only the Keychain is asked.
+  assert.equal(keyFor({ id: 'ollama' }, { env: {}, run: fakeSecurity({ status: 44 }) }), null);
+});
+
+test('saving a service key adds that service\'s item and nothing else', () => {
+  const run = fakeSecurity({ status: 0 });
+  saveKey('openrouter', ` ${KEY} `, { run });
+  assert.deepEqual(run.calls.map(c => c.args), [['add-generic-password', '-U', '-s', 'dyslexic-mode', '-a', 'openrouter', '-w', KEY]]);
 });
