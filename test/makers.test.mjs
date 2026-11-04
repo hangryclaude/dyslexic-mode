@@ -47,6 +47,7 @@ test('a model id reads as words', () => {
     'models/gemini-2.5-pro': 'Gemini 2.5 Pro', 'meta-llama/Llama-3.3-70B-Instruct': 'Llama 3.3 70B Instruct',
     'llama-3.1-405b': 'Llama 3.1 405B', 'deepseek-v3.2': 'DeepSeek V3.2', 'glm-5.3': 'GLM 5.3',
     'kimi-k2-thinking': 'Kimi K2 Thinking', 'o3-pro': 'o3 Pro', 'grok-4.5': 'Grok 4.5', 'gpt-oss-120b': 'GPT-OSS 120B',
+    'qwen3-30b-a3b': 'Qwen3 30B A3B', 'gemma-4-26b-a4b': 'Gemma 4 26B A4B',
   };
   for (const [id, words] of Object.entries(cases)) assert.equal(pretty(id), words, id);
 });
