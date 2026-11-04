@@ -349,5 +349,8 @@ The opencode integration tests run against the real `opencode` only on request:
 
 ## The skill
 
-`skill/` is a copy of `~/.claude/skills/dyslexic-reread`.
+`skill/` is the skill the app puts in the system prompt.
 It holds the research, rewrite patterns, evals and the linter.
+
+It began as a copy of `~/.claude/skills/dyslexic-reread` and has moved on.
+The reply shape and the study plans are only here.
