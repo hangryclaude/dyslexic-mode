@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { renderBrain, field } from '../lib/brain.mjs';
-import { paint } from '../lib/anim.mjs';
+import { renderBrain, field, wordSkin, DOT } from '../lib/brain.mjs';
+import { paint, brainLines, TURN } from '../lib/anim.mjs';
 
 const visible = s => s.replace(/\x1b\[[0-9;]*m/g, '');
 
@@ -46,4 +46,47 @@ test('a full-screen frame renders fast enough to animate', () => {
   renderBrain({ cols: 160, rows: 45, angle: 0.3, pulse: 0.2 });
   const ms = performance.now() - t;
   assert.ok(ms < 250, `${ms.toFixed(0)}ms`);
+});
+
+const WORDS = [
+  { name: 'Claude Opus', color: [217, 119, 87] },
+  { name: 'GPT-5', color: [16, 163, 127] },
+  { name: 'Gemini 4 Argon', color: [66, 133, 244] },
+  { name: 'Grok 4.7', color: [200, 200, 200] },
+];
+
+// The names on a frame: each run of cells that share one word colour.
+const namesOn = frame => frame.flatMap(row => {
+  const found = [];
+  let run = null;
+  for (const c of [...row, null]) {
+    if (c && c.rgb !== DOT && run && c.rgb === run.rgb) run.text += c.ch;
+    else {
+      if (run) found.push(run);
+      run = c && c.rgb !== DOT ? { text: c.ch, rgb: c.rgb } : null;
+    }
+  }
+  return found;
+});
+
+test('a brain written in names shows every name whole, in its own colour', () => {
+  const skin = wordSkin(WORDS, { cols: 76, rows: 30 });
+  for (const angle of [0, 1, 2.5, 4]) {
+    const names = namesOn(skin(renderBrain({ cols: 76, rows: 30, angle }), { angle }));
+    assert.ok(names.length >= 3, `only ${names.length} names at angle ${angle}`);
+    for (const { text, rgb } of names) assert.ok(WORDS.some(w => w.name === text && w.color === rgb), `"${text}" is not a whole name`);
+  }
+});
+
+test('the same turn writes the same names in the same places', () => {
+  const draw = () => wordSkin(WORDS, { cols: 60, rows: 24 })(renderBrain({ cols: 60, rows: 24, angle: 1.2 }), { angle: 1.2 });
+  assert.deepEqual(draw(), draw());
+});
+
+test('the brain turns once in TURN frames, so a recording of them loops without a seam', () => {
+  const at = f => brainLines({ cols: 60, rows: 24, f, words: WORDS, caption: [['turn your agent dyslexic', s => s]] });
+  assert.deepEqual(at(TURN), at(0));
+  assert.notDeepEqual(at(1), at(0));
+  assert.equal(at(0).length, 24);
+  assert.equal(visible(at(0).at(-1)).trim(), 'turn your agent dyslexic');
 });
