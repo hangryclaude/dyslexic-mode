@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { mkdtempSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { models, findModel, modelLine, nameOf, byMaker, makerLine, matching } from '../lib/modelmenu.mjs';
+import { models, findModel, modelLine, nameOf, byMaker, makerLine, matching, brainWords, brainOf } from '../lib/modelmenu.mjs';
 import { CLAUDE_MODELS } from '../lib/models.mjs';
 
 let home;
@@ -103,4 +103,13 @@ test('any list with the same shape works, so a provider needs no change here', (
   const other = [{ id: 'gpt-5.5', label: 'GPT 5.5', provider: 'openai', contextWindow: 400_000 }];
   assert.equal(findModel('gpt-5.5', other).provider, 'openai');
   assert.equal(findModel('GPT 5.5', other).id, 'gpt-5.5');
+});
+
+test('the brain is written in every model\'s name once, every company first, each in its colour', () => {
+  const list = [...LIST, POE], words = brainWords(list);
+  // grok names its models by id, so grok-4.7 is spelled out.
+  assert.deepEqual(words.map(w => w.name), ['Claude Fable', 'GPT 6 Luna', 'Gemini 4 Argon', 'Grok 4.7', 'Claude Opus', 'Claude Sonnet', 'GPT-5', 'Grok 4.6', 'Claude Haiku']);
+  assert.deepEqual(words.slice(0, 4).map(w => w.color), byMaker(list).map(g => g.maker.color));
+  assert.equal(brainOf(list).tally, '10 models · 4 companies');
+  assert.equal(brainOf([CLAUDE_MODELS[0]]).tally, '1 model · 1 company');
 });

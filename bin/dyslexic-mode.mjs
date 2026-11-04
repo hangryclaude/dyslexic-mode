@@ -11,10 +11,10 @@ import { summarize, table } from '../lib/stats.mjs';
 import { TARGET, questionFor, order, pickOf, PLAIN_SYSTEM, words } from '../lib/readtest.mjs';
 import { MENU, GROUPS, resolve } from '../lib/commands.mjs';
 import { setPalette, randomPalette, nextPalette, palette, grad } from '../lib/palette.mjs';
-import { intro, thinking, brainScreen, menu, secret, promptGlyph, swatch } from '../lib/anim.mjs';
+import { intro, thinking, brainScreen, brainCaption, menu, secret, promptGlyph, swatch } from '../lib/anim.mjs';
 import { ESC, dim, fancy, fg, heading } from '../lib/style.mjs';
 import { stream } from '../lib/render.mjs';
-import { models, modelLine, findModel, byMaker, makerLine, nameOf, routeOf, matching } from '../lib/modelmenu.mjs';
+import { models, modelLine, findModel, byMaker, makerLine, nameOf, routeOf, matching, brainOf } from '../lib/modelmenu.mjs';
 import { makerOf } from '../lib/makers.mjs';
 import { SERVICES, findService } from '../lib/providers/services.mjs';
 import { contextWindow, estimateTokens, usedTokens, hasUsage, breakdown, barCounts, bar, FILL, count, share } from '../lib/context.mjs';
@@ -659,7 +659,11 @@ const commands = {
   '/stats': () => show(table(summarize({ chats: rows('chats.jsonl'), tests: rows('tests.jsonl'), flags: rows('flags.jsonl') }))),
   '/profile': () => (readProfile() ? show(readProfile()) : note('no rules yet. type ! after a reply that tripped you')),
   '/color': () => { nextPalette(); rl.setPrompt(promptGlyph(out)); out.write('\n' + swatch(palette()) + '\n\n'); },
-  '/brain': () => brainScreen(out, nextLine(''), 'press Enter to go back'),
+  '/brain': () => {
+    // The brain is written in the name of every model you can reach.
+    const { words, tally } = brainOf();
+    return brainScreen(out, nextLine(''), 'press Enter to go back', { words, caption: brainCaption(tally) });
+  },
   '/calm': () => note(`motion ${(state.calm = !state.calm) ? 'off' : 'on'}`),
   '/pliny': () => note(`pliny mode ${(state.pliny = !state.pliny) ? 'on: 7h3 0n3 7ru3 l33t' : 'off'}`),
   '/voice': voiceChat,
