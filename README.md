@@ -3,19 +3,19 @@
 <p align="center">
   <b>Turn your agent dyslexic.</b><br>
   It thinks the way strong dyslexic thinkers do: the big picture first, in pictures and patterns.<br>
-  Then it answers in short, clear lines a dyslexic reader can scan. A terminal chat for any model.
+  Then it answers in short, clear lines a dyslexic reader can scan. A terminal chat for every AI.
 </p>
 <p align="center">
   Does dyslexic thinking make an AI better? This repo tests it, on many models.
 </p>
 
 <p align="center">
-  <img src="media/chat.svg" alt="dyslexic mode: the intro, a question, and a reply with short lines, plain words and clear headings" width="780">
+  <img src="media/chat.svg" alt="dyslexic mode: the start screen with every AI it can reach, a question, and GPT-5's reply in short lines with bold labels" width="780">
 </p>
 
 - `/think` changes how the model thinks, before it writes a word.
 - Every reply is checked the way a dyslexic reader reads, then fixed once if it fails.
-- Any model: Claude, grok, and every model your opencode has.
+- Every AI: Claude, GPT, Gemini, Grok, Llama, DeepSeek, Qwen and more. One Poe key reaches most of them.
 - ChatGPT voice. You bring your own OpenAI key. It stays in your Keychain.
 - Type `!` after a reply that tripped you. It learns a rule from it.
 - `/help` lists every command. A typo still works: `/clam` runs `/calm`.
@@ -61,48 +61,85 @@ npx github:hangryclaude/dyslexic-mode
 Or clone it and run `node bin/dyslexic-mode.mjs`.
 
 You need Node 20+ and the `claude` CLI, logged in.
-`grok` and `opencode` are optional. Voice needs `ffmpeg`.
+`grok`, `opencode` and keys for other AIs are optional. Voice needs `ffmpeg`.
 There are no packages to install.
-Built and tested on macOS. `/copy` uses `pbcopy`, and your key uses the Keychain.
+Built and tested on macOS. `/copy` uses `pbcopy`, and keys use the Keychain.
 
 `-c` goes back to your last chat.
 
-## Any model
+## Every AI
 
-`/model` opens a list. Up and down move, Enter picks.
-`/model opus` types the name. A slip like `/model opsu` works too.
-`/model refresh` asks the providers again, and says which one could not be asked.
+`/model` lists every AI you can reach, by company.
+Pick a company, then a model. Up and down move, Enter picks. A number picks a row.
+`/model gemini` lists every Gemini. `/model opus` picks one by name.
+A slip like `/model opsu` works too.
+`/model refresh` asks every provider again, and says which one could not be asked.
+
+<p align="center">
+  <img src="media/models.svg" alt="/model: 18 companies, each with a colour and how many models it has, then Google's models with who brings each one and how much it holds" width="780">
+</p>
 
 | Provider | Models | Runs on |
 |----------|--------|---------|
 | Claude | fable, opus, sonnet, haiku | the `claude` CLI you are logged in to |
 | grok | whatever `grok models` lists | the `grok` CLI |
 | opencode | every model your opencode has | the `opencode` CLI |
+| a service | every chat model it offers | your key for it |
 
-Each one uses its own login. This app holds no key for them.
+The three CLIs use their own logins. This app holds no key for them.
+
+### Services
+
+Each service needs one key. Poe and OpenRouter reach many companies on one key.
+
+| Service | Brings | Add it | Or set |
+|---------|--------|--------|--------|
+| Poe | Claude, GPT, Gemini, Grok, Llama and more | `/key poe` | `POE_API_KEY` |
+| OpenRouter | 300+ models | `/key openrouter` | `OPENROUTER_API_KEY` |
+| OpenAI | GPT, and ChatGPT voice | `/key openai` | `OPENAI_API_KEY` |
+| Google Gemini | Gemini and Gemma | `/key gemini` | `GEMINI_API_KEY` |
+| xAI | Grok | `/key xai` | `XAI_API_KEY` |
+| DeepSeek | DeepSeek | `/key deepseek` | `DEEPSEEK_API_KEY` |
+| Mistral | Mistral | `/key mistral` | `MISTRAL_API_KEY` |
+| Groq | open models, very fast | `/key groq` | `GROQ_API_KEY` |
+| Cerebras | open models, very fast | `/key cerebras` | `CEREBRAS_API_KEY` |
+| Together | open models | `/key together` | `TOGETHER_API_KEY` |
+| Moonshot | Kimi | `/key moonshot` | `MOONSHOT_API_KEY` |
+| Alibaba Cloud | Qwen | `/key qwen` | `DASHSCOPE_API_KEY` |
+| Ollama | models on this computer | no key | |
+| LM Studio | models on this computer | no key | |
+
+- `/key` alone lists them. It asks for the key with the letters hidden.
+- After a key, the next `/model` lists that service's models.
+- Ollama and LM Studio need no key. `/model refresh` finds them while they run.
+- `<ID>_BASE_URL` points a service somewhere else, like `OLLAMA_BASE_URL=http://box:11434/v1`.
+- Poe is checked with a real key. The rest speak the same API, and are tested against a fake one.
 
 A model's id says where it goes:
-`claude/opus`, `grok/grok-4.7`, `opencode-go/gemini-4-argon`.
+`claude/opus`, `grok/grok-4.7`, `opencode-go/gemini-4-argon`, `api/poe/gpt-5`.
 A bare `sonnet` still means `claude/sonnet`.
 
 - The list is asked once a day. It is kept in `~/.dyslexic-mode/models.json`.
-  That file holds ids, names and window sizes. Nothing from a login.
+  That file holds ids, names and window sizes. No login, and no key.
 - A new model starts a fresh session, because a session belongs to the model that began it.
   The chat stays on screen. The choice is kept for next time.
   `--model haiku` is for one launch only.
+- A service keeps no chat of its own. The chat so far goes with every message,
+  so a long chat costs more there.
 - Everything follows the model: the chat, `/plan`, `/compact`, `/test` and explorer.
   The one exception is `!`. It learns its rule with Claude Haiku.
-- grok and opencode are plain chat, with no tools.
-  Full access is Claude's alone. `/tools` will not turn it on for another provider.
+- Only Claude gets tools. Every other model is plain chat.
+  `/tools` will not turn full access on for another provider.
 - Going back to a chat that another provider began (`-c` or `/resume`) switches to that model.
 - `/context` uses each provider's own token counts.
   A model that gives none is said so, and only the system prompt is counted.
+- A reply's last line names the model that wrote it, in its company's colour.
 
 ## ChatGPT voice
 
 Talk instead of typing. Hear the answer, and read it too.
 
-1. `/key` asks for your OpenAI key. The letters stay hidden.
+1. `/key openai` asks for your OpenAI key. The letters stay hidden.
 2. `/voice` starts the voice chat. `/voice` again stops it.
 
 - It uses your own OpenAI key. It costs money on your OpenAI account.
@@ -117,20 +154,20 @@ Talk instead of typing. Hear the answer, and read it too.
 
 No key yet? `/voice` says:
 
-> ChatGPT voice needs an OpenAI key. Type /key to add it. It is saved in your Mac's Keychain, never in a file.
+> ChatGPT voice needs an OpenAI key. Type /key openai to add it. It is saved in your Mac's Keychain, never in a file.
 
 ## Keys and secrets
 
 - Claude, grok and opencode use their own logins. This app never sees those keys.
-- Only voice needs a key: your OpenAI key.
-- It lives in the macOS Keychain (service `dyslexic-mode`, account `openai`).
-  Or set `OPENAI_API_KEY` in your shell. That one is used first.
-- `/key` asks with the letters hidden. A key typed after the command is refused.
-- The key is never written to a file of ours. It is never printed, and never in a log or a chat.
+- A service needs your key for it. Voice needs your OpenAI key.
+- Each key lives in the macOS Keychain: service `dyslexic-mode`, account the service, like `poe`.
+  Or set the service's variable in your shell, like `POE_API_KEY`. That one is used first.
+- `/key poe` asks with the letters hidden. A key typed after `/key` is refused.
+- A key is never written to a file of ours. It is never printed, and never in a log or a chat.
   An error message shows it as `[key]`.
-- It goes to OpenAI in a header, never in an address.
+- It goes to its service in a header, never in an address.
 - While it saves, macOS `security` gets the key on its command line for a moment.
-- To delete it: open Keychain Access, search `dyslexic-mode`, delete the item.
+- To delete one: open Keychain Access, search `dyslexic-mode`, delete the item.
 - This repo ignores `.env`, `.env.*`, `*.pem` and `*.key`.
 - `npm test` scans every tracked file for key shapes.
   `npm run check-secrets` runs `gitleaks` if you have it.
@@ -152,7 +189,7 @@ Two commands that start the same way, like `/co`, are never guessed.
 | `/plan` | shows your latest plan |
 | `/export` | saves the chat as a markdown file, prints the path |
 | `/copy` | copies the last reply |
-| `/model` | picks any model with the arrow keys. `/model opus` types it |
+| `/model` | picks any AI: a company, then a model. `/model opus` types it |
 | `/think` | picks how the model thinks |
 | `/context` | shows how full the context window is |
 | `/status` | model, thinking, tools, context, session, voice |
@@ -165,7 +202,7 @@ Two commands that start the same way, like `/co`, are never guessed.
 | `/calm` | turns motion off |
 | `/pliny` | l33t replies with dividers |
 | `/voice` | talks with ChatGPT voice, on or off |
-| `/key` | saves your OpenAI key in the Keychain |
+| `/key` | adds a key for more AIs, or your OpenAI key for voice. `/key poe` goes straight to Poe |
 | `/help` | every command, grouped |
 | `/exit` | quits |
 
@@ -233,6 +270,7 @@ In full access, your tool servers stay up between messages too.
 - A table too wide for the line wraps inside its cells.
 - Headings get a colored bar. Code gets a bar down its side.
 - Italics are shown upright, because italics read worse.
+- A reply's last line says which model wrote it, how long it took, and how the re-read went.
 
 ## Full access
 
@@ -359,7 +397,7 @@ The two pictures in this file are real recordings of the app.
 npm test
 ```
 
-The tests use fake `claude`, `grok`, `opencode`, `pbcopy`, `security`, `ffmpeg` and `ffplay`, and a fake OpenAI socket.
+The tests use fake `claude`, `grok`, `opencode`, `pbcopy`, `security`, `ffmpeg` and `ffplay`, a fake OpenAI socket and a fake AI service.
 So they make no real calls, never touch your clipboard or your Keychain,
 and never open the microphone.
 

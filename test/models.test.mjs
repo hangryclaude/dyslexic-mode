@@ -1,10 +1,12 @@
 import { test, beforeEach, afterEach } from 'node:test';
 import assert from 'node:assert/strict';
-import { readFileSync, writeFileSync, mkdirSync, mkdtempSync, existsSync } from 'node:fs';
+import { spawn } from 'node:child_process';
+import { readFileSync, writeFileSync, mkdirSync, mkdtempSync, existsSync, symlinkSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { listModels, refreshModels, cachedModels, resolveModel, openSessionFor, canonicalModel, providerOf, askFor, learnContextWindow, contextWindowOf, CLAUDE_MODELS } from '../lib/models.mjs';
+import { listModels, refreshModels, cachedModels, resolveModel, openSessionFor, canonicalModel, providerOf, askFor, learnContextWindow, contextWindowOf, markStale, CLAUDE_MODELS } from '../lib/models.mjs';
+import { serviceById } from '../lib/providers/services.mjs';
 
 const fixture = name => fileURLToPath(new URL(`./fixtures/${name}`, import.meta.url));
 const GROK = fixture('fake-grok.mjs'), OPENCODE = fixture('fake-opencode.mjs'), CLAUDE = fixture('fake-claude.mjs');
@@ -20,7 +22,8 @@ beforeEach(() => {
   process.env.FAKE_OC_STATE = join(dir, 'state.json');
   process.env.FAKE_STATE = join(dir, 'state');
   process.env.DYSLEXIC_MODE_HOME = join(dir, 'home');
-  options = { opencode: { bin: OPENCODE }, grok: { bin: GROK, dir: grokDir } };
+  // No real service is asked: each test that wants one points it at the fake model endpoint.
+  options = { opencode: { bin: OPENCODE }, grok: { bin: GROK, dir: grokDir }, api: { services: [] } };
 });
 const opened = [];
 afterEach(() => { for (const s of opened.splice(0)) s.close(); });
@@ -57,7 +60,7 @@ test('the cache holds only public model metadata, and a fresh one is reused inst
 test('with no refresh yet, only the claude models are known, and a provider that fails keeps its last models', async () => {
   assert.deepEqual(cachedModels(), CLAUDE_MODELS);
   await refreshModels(options);
-  const { models, errors } = await refreshModels({ opencode: { bin: join(dir, 'missing') }, grok: { bin: GROK, dir: grokDir } });
+  const { models, errors } = await refreshModels({ ...options, opencode: { bin: join(dir, 'missing') } });
   assert.match(errors.opencode, /ENOENT|missing/);
   assert.ok(models.some(m => m.id === 'opencode-go/gemini-4-argon'), 'last known opencode models kept');
   assert.ok(models.some(m => m.id === 'grok/grok-4.7'));
@@ -171,4 +174,84 @@ test('a question that fails rejects with the provider\'s own message, and one th
   const before = launches().length;
   await assert.rejects(askFor('grok/grok-4.7', 'hi', { bin: GROK, signal: AbortSignal.abort() }), err => err.name === 'AbortError');
   assert.equal(launches().length, before, 'a call that is already stopped starts nothing');
+});
+
+// Not a credential. The tests only check where it goes.
+const KEY = 'FAKE-KEY-FOR-TESTS-0123456789';
+// The fake model endpoint stands in for a real service, and the fake security for the Keychain.
+async function fakeService() {
+  const child = spawn(process.execPath, [fixture('fake-openai.mjs')]);
+  opened.push({ close: () => child.kill() });
+  const port = await new Promise(res => child.stdout.once('data', d => res(/listening (\d+)/.exec(String(d))[1])));
+  return `http://127.0.0.1:${port}/v1`;
+}
+function withEnv(vars, fn) {
+  const before = Object.fromEntries(Object.keys(vars).map(k => [k, process.env[k]]));
+  Object.assign(process.env, vars);
+  const restore = () => { for (const [k, v] of Object.entries(before)) if (v === undefined) delete process.env[k]; else process.env[k] = v; };
+  return Promise.resolve().then(fn).finally(restore);
+}
+function fakeKeychain() {
+  const bin = join(dir, 'bin');
+  mkdirSync(bin, { recursive: true });
+  symlinkSync(fixture('fake-security.mjs'), join(bin, 'security'));
+  return { PATH: `${bin}:${process.env.PATH}`, FAKE_KEYCHAIN: join(dir, 'keychain.json') };
+}
+
+test('a refresh asks each service with a key and each local server, and lists their models as api/<service>/<model>', async () => {
+  const base = await fakeService();
+  await withEnv({ POE_BASE_URL: base, OLLAMA_BASE_URL: base }, async () => {
+    const asked = [];
+    const api = { services: ['poe', 'groq', 'ollama'].map(serviceById), key: s => { asked.push(s.id); return s.id === 'poe' ? KEY : null; } };
+    const { models, errors } = await refreshModels({ ...options, api });
+    assert.deepEqual(errors, {});
+    assert.deepEqual(asked, ['poe', 'groq'], 'a local server is never asked for a key');
+    assert.deepEqual(models.find(m => m.id === 'api/poe/echo'), {
+      id: 'api/poe/echo', label: 'Echo', provider: 'api', service: 'poe', model: 'echo', owner: null, contextWindow: null, contextSource: 'unknown',
+    });
+    assert.ok(models.some(m => m.id === 'api/ollama/echo'));
+    assert.ok(!models.some(m => m.service === 'groq'), 'a service with no key is not asked');
+    assert.ok(models.some(m => m.id === 'claude/opus') && models.some(m => m.id === 'grok/grok-4.7'), 'the CLIs are still there');
+  });
+  // A service that cannot be reached this time keeps what it offered, and says why.
+  await withEnv({ POE_BASE_URL: 'http://127.0.0.1:9/v1' }, async () => {
+    const { models, errors } = await refreshModels({ ...options, api: { services: [serviceById('poe')], key: () => KEY } });
+    assert.match(errors.Poe, /Poe could not be reached/);
+    assert.ok(models.some(m => m.id === 'api/poe/echo'));
+  });
+});
+
+test('an api/ id opens a chat with its service and key, a resumed one keeps its history, and a side question works', async () => {
+  const base = await fakeService();
+  await withEnv({ POE_BASE_URL: base, POE_API_KEY: KEY, OLLAMA_BASE_URL: base }, async () => {
+    assert.deepEqual(resolveModel('api/poe/gpt-5', []), { provider: 'api', service: 'poe', model: 'gpt-5' });
+    assert.equal(providerOf('api/openrouter/openai/gpt-5', []), 'api');
+    assert.equal(resolveModel('api/openrouter/openai/gpt-5', []).model, 'openai/gpt-5');
+    assert.throws(() => resolveModel('api/nowhere/echo', []), /no model called "api\/nowhere\/echo"/);
+    const s = openSessionFor('api/poe/echo', { system: 'be brief', resume: 'api-1', history: [{ q: 'earlier', text: 'ok' }] });
+    opened.push(s);
+    const r = await s.send('now');
+    assert.equal(r.text, 'echo: now [remembers: earlier]');
+    assert.equal(r.sessionId, 'api-1');
+    assert.throws(() => openSessionFor('api/poe/echo', { tools: true }), /full access works with Claude only, not Poe/);
+    assert.equal((await askFor('api/ollama/echo', 'one question', { system: 'be brief' })).text, 'echo: one question');
+  });
+});
+
+test('a service with no key yet says how to add one, and asks the Keychain under its own name', async () => {
+  const env = fakeKeychain();
+  await withEnv({ ...env, GROQ_API_KEY: '', FAKE_SECURITY_LOG: join(dir, 'security.log') }, () => {
+    assert.throws(() => openSessionFor('api/groq/llama-3.3-70b-versatile'), /no Groq key yet\. \/key groq saves one/);
+    const asked = readFileSync(join(dir, 'security.log'), 'utf8').trim().split('\n').map(l => JSON.parse(l));
+    assert.deepEqual(asked, [['find-generic-password', '-s', 'dyslexic-mode', '-a', 'groq', '-w']]);
+  });
+});
+
+test('a new key makes the next list a fresh one', async () => {
+  await refreshModels(options);
+  markStale();
+  const before = JSON.parse(readFileSync(join(dir, 'home', 'models.json'), 'utf8'));
+  assert.equal(before.fetchedAt, new Date(0).toISOString());
+  await listModels(options);
+  assert.notEqual(JSON.parse(readFileSync(join(dir, 'home', 'models.json'), 'utf8')).fetchedAt, before.fetchedAt);
 });

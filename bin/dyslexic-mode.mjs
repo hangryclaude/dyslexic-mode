@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 import { createInterface } from 'node:readline';
 import { ask, toolLine } from '../lib/claude.mjs';
-import { askFor, canonicalModel, learnContextWindow, listModels, openSessionFor, providerOf, refreshModels } from '../lib/models.mjs';
+import { askFor, canonicalModel, learnContextWindow, listModels, markStale, openSessionFor, providerOf, refreshModels } from '../lib/models.mjs';
 import { reply } from '../lib/filter.mjs';
 import { systemPrompt } from '../lib/prompt.mjs';
 import { leet, DIVIDER } from '../lib/pliny.mjs';
@@ -14,9 +14,11 @@ import { setPalette, randomPalette, nextPalette, palette, grad } from '../lib/pa
 import { intro, thinking, brainScreen, menu, secret, promptGlyph, swatch } from '../lib/anim.mjs';
 import { ESC, dim, fancy, fg, heading } from '../lib/style.mjs';
 import { stream } from '../lib/render.mjs';
-import { models, modelLine, findModel } from '../lib/modelmenu.mjs';
+import { models, modelLine, findModel, byMaker, makerLine, nameOf, routeOf, matching } from '../lib/modelmenu.mjs';
+import { makerOf } from '../lib/makers.mjs';
+import { SERVICES, findService } from '../lib/providers/services.mjs';
 import { contextWindow, estimateTokens, usedTokens, hasUsage, breakdown, barCounts, bar, FILL, count, share } from '../lib/context.mjs';
-import { openaiKey, saveOpenaiKey } from '../lib/keys.mjs';
+import { openaiKey, keyFor, saveKey } from '../lib/keys.mjs';
 import { openVoice, NO_KEY } from '../lib/voicechat.mjs';
 import { LEVELS, LEVEL_NAMES, promptThinking, withHistory, exploreTurn } from '../lib/think.mjs';
 import { COMPACT_ASK, carryPrompt } from '../lib/compact.mjs';
@@ -84,7 +86,8 @@ const system = (tools = state.tools, level = state.thinking) => systemPrompt({ p
 // to whichever provider the model's id names: Claude, grok or opencode.
 const open = opts => openSessionFor(state.model, { system: system(), tools: state.tools, ...opts });
 const side = (prompt, opts) => askFor(state.model, prompt, opts);
-const chatSession = () => (session ??= open({ resume: state.sessionId }));
+// A service keeps no chat of its own, so it gets the chat so far. The CLIs keep theirs.
+const chatSession = () => (session ??= open({ resume: state.sessionId, history: state.history }));
 const dropSession = () => { session?.close(); session = null; };
 // Explorer sends every message as one-shot calls, so it has no chat process to start.
 const warm = () => { if (state.thinking !== 'explorer') chatSession().warm(); };
@@ -115,8 +118,35 @@ if (latest) { state.sessionId = latest.id; state.history = chatOf(latest.id); ba
 // Claude starts while the intro plays, so the first reply skips the start-up wait.
 warm();
 
+// The model in use as a name and a colour: its entry in the list, else the id as typed. No id at
+// all is Claude's own default.
+function current() {
+  const m = models().find(x => x.id === state.model)
+    ?? { id: state.model ?? 'claude', label: state.model ?? 'Claude', provider: providerOf(state.model) ?? 'claude', model: state.model };
+  return { name: nameOf(m), maker: makerOf(m), route: routeOf(m) };
+}
+const dot = color => (fancy(out) ? `${fg(color, '●')} ` : '');
+
+// Every company with a model you can reach, as a coloured dot and its family name, as many as fit,
+// then how many models in all. Before the first /model only Claude's are known.
+function aisLine() {
+  const list = models(), groups = byMaker(list), room = (out.columns || 80) - 4;
+  const total = `${count(list.length)} models${groups.length === 1 ? ' · /model finds every AI you can reach' : ''}`;
+  let line = '', used = 0, shown = 0;
+  for (const g of groups) {
+    const piece = `● ${g.maker.family}  `;
+    if (used + piece.length + total.length + 10 > room) break;
+    line += `${dot(g.maker.color) || '● '}${g.maker.family}  `;
+    used += piece.length;
+    shown++;
+  }
+  return `  ${line}${soft(`${groups.length > shown ? `+${groups.length - shown} more · ` : ''}${total}`)}`;
+}
+
 if (!state.calm) await intro(out);
-else out.write('\n  DYSLEXIC MODE\n\n  press / then Enter for the menu.\n\n');
+else out.write('\n  DYSLEXIC MODE\n\n  turn your agent dyslexic\n');
+out.write(aisLine() + '\n\n');
+out.write(soft('  press / then Enter for the menu.   ! flags a hard reply.') + '\n\n');
 const using = [state.tools ? 'full access: files, shell, web, your skills, Claude agents, Codex' : 'chat only: tools are off'];
 if (state.model) using.push(`model ${state.model}`);
 if (state.thinking !== 'off') using.push(`thinking ${state.thinking}`);
@@ -214,8 +244,10 @@ async function chat(msg) {
   rememberWindow(r.contextWindow ?? r.usage?.contextWindow);
   const ms = Date.now() - t0;
   append('chats.jsonl', { ts: Date.now(), session: r.sessionId, q: msg.slice(0, 300), text: r.text, rewrites: r.rewrites, hard: r.hard, words: words(r.text), tools: state.tools, model: state.model ?? null, thinking: state.thinking, ms, first });
-  const check = r.hard ? `${r.hard} hard hit left` : r.rewrites ? 'tidied once' : 're-read clean';
-  const tail = `${state.pliny ? `\n  ${DIVIDER}\n` : ''}\n` + soft(fit(`  ${(ms / 1000).toFixed(1)}s · ${check}${explorer ? ' · explored 3 ways' : ''} · ! if it tripped you`, (out.columns || 80) - 1)) + '\n\n';
+  const check = r.hard ? `${r.hard} hard hit${r.hard === 1 ? '' : 's'} left` : r.rewrites ? 'tidied once' : 're-read clean';
+  // Which model wrote it, in its company's colour, since /model can change it at any turn.
+  const who = current();
+  const tail = `${state.pliny ? `\n  ${DIVIDER}\n` : ''}\n  ${dot(who.maker.color)}` + soft(fit(`${who.name} · ${(ms / 1000).toFixed(1)}s · ${check}${explorer ? ' · explored 3 ways' : ''} · ! if it tripped you`, (out.columns || 80) - 5)) + '\n\n';
   out.write(tail);
 }
 
@@ -354,8 +386,10 @@ function showContext() {
 
 function showStatus() {
   const window = windowNow();
+  const who = current();
   show(table([
     ['Model', state.model ?? 'default'],
+    ['From', `${who.maker.name}, via ${who.route}`],
     ['Thinking', state.thinking],
     ['Tools', state.tools ? 'on' : 'off'],
     ['Context', state.usage ? `${share(usedTokens(state.usage), window)} of ${count(window)}` : state.history.length ? 'not counted' : 'no reply yet'],
@@ -367,30 +401,39 @@ function showStatus() {
 // A line of model ids that fits the screen. opencode alone can offer a hundred.
 const someModels = list => list.slice(0, 12).map(m => m.id).join(', ') + (list.length > 12 ? `, and ${list.length - 12} more` : '');
 
-// The picker, or a typed name, over every model Claude, grok and opencode offer. The list is a day
-// old at most, and `/model refresh` asks them again and says which could not be asked. A different
-// model starts a fresh session, because a session belongs to the model that began it. The chat
-// stays on screen. Full access is Claude's alone, so a model from another provider turns it off.
+// The picker, or a typed name, over every model the CLIs and your services offer. It asks for the
+// company first, then the model, so a few hundred models are two short lists. A word that names a
+// family, like gemini, offers that family. The list is a day old at most, and `/model refresh` asks
+// everyone again and says who could not be asked. A different model starts a fresh session,
+// because a session belongs to the model that began it. The chat stays on screen. Full access is
+// Claude's alone, so a model from anywhere else turns it off.
 async function pickModel(arg = '') {
   const again = arg.toLowerCase() === 'refresh';
   const { models: list, errors } = await working(async () => {
-    spinner?.status('asking Claude, grok and opencode what they offer');
+    spinner?.status('asking every AI you can reach what it offers');
     return again ? refreshModels() : { models: await listModels(), errors: {} };
   });
   for (const [who, why] of Object.entries(errors)) note(`${who} could not be asked: ${fit(why.replace(/\s+/g, ' '), width() - 24)}`);
-  if (again) return note(`${list.length} models. /model lists them`);
+  if (again) return note(`${list.length} models from ${byMaker(list).length} companies. /model lists them`);
   let chosen;
   if (arg) {
     chosen = findModel(arg, list);
-    if (!chosen) return note(`no model "${arg}". these are the models: ${someModels(list)}`);
+    const family = chosen ? [] : matching(arg, list);
+    if (!chosen && !family.length) return note(`no model "${arg}". these are the models: ${someModels(list)}`);
+    if (family.length === 1) [chosen] = family;
+    else if (family.length && !fancy(out)) return note(`${family.length} models have "${arg}" in their name: ${someModels(family)}`);
+    else if (family.length && !(chosen = await pickFrom(family))) return note('menu closed');
     if (chosen.id.toLowerCase() !== arg.toLowerCase()) note(`${arg} → ${chosen.id}`);
   } else if (!fancy(out)) {
     return note(`models: ${someModels(list)}. type /model and a name`);
   } else {
+    const groups = byMaker(list);
     out.write('\n');
-    const i = await menu(out, process.stdin, list.map(m => [m.id, modelLine(m, state.model)]), { at: list.findIndex(m => m.id === state.model), nameMax: 40 });
+    const rows = [...groups.map(g => [g.maker.name, makerLine(g, state.model), g.maker.color]), ['+ more AIs', 'add a key for Poe, OpenRouter, Gemini, Groq…']];
+    const i = await menu(out, process.stdin, rows, { at: groups.findIndex(g => g.models.some(m => m.id === state.model)) });
     if (i < 0) return note('menu closed');
-    chosen = list[i];
+    if (i === groups.length) return setKey('');
+    if (!(chosen = await pickFrom(groups[i].models))) return note('menu closed');
   }
   if (chosen.id === state.model) return note(`already on ${chosen.id}`);
   state.model = chosen.id;
@@ -401,6 +444,13 @@ async function pickModel(arg = '') {
     note('full access works with Claude only, so tools are off');
   }
   fresh(`model: ${chosen.id}. fresh chat`);
+}
+
+// One company's models, or a family's, each in its company's colour. Null when it is closed.
+async function pickFrom(list) {
+  out.write('\n');
+  const i = await menu(out, process.stdin, list.map(m => [nameOf(m), modelLine(m, state.model), makerOf(m).color]), { at: list.findIndex(m => m.id === state.model), nameMax: 34 });
+  return i < 0 ? null : list[i];
 }
 
 async function pickThinking(arg) {
@@ -552,16 +602,36 @@ function voiceChat() {
 // Reads a line with the letters hidden on a terminal. A pipe shows nothing anyway.
 const readSecret = q => (process.stdin.isTTY ? secret(out, process.stdin, soft(q)) : nextLine(q));
 
-// The key is asked for with the letters hidden, so it never shows on the screen or in the
-// scroll-back, and it goes straight to the Keychain. It is never written to a file of ours, and
-// typing it after the command would put it on screen, so that is refused.
+// A key for any service. It is asked for with the letters hidden, so it never shows on the screen
+// or in the scroll-back, and it goes straight to the Keychain, never to a file of ours. A key typed
+// after the command would be on screen, so a long word that names no service is refused.
 async function setKey(arg) {
-  if (arg) return note('type /key alone. it asks for the key with the letters hidden, so the key never shows on the screen');
-  const typed = ((await readSecret('  OpenAI key (hidden. Enter saves, Esc cancels): ')) ?? '').trim();
+  const keyed = SERVICES.filter(s => !s.local);
+  let service;
+  if (arg) {
+    service = findService(arg, keyed);
+    if (!service) {
+      return note(/^\S{20,}$/.test(arg)
+        ? 'type /key and a service, like /key poe. it asks for the key with the letters hidden, so the key never shows on the screen'
+        : `no service "${arg}". these take a key: ${keyed.map(s => s.id).join(', ')}`);
+    }
+  } else if (!fancy(out)) {
+    return note(`which service? type /key and one of: ${keyed.map(s => s.id).join(', ')}`);
+  } else {
+    out.write('\n');
+    const i = await menu(out, process.stdin, keyed.map(s => [s.name, `${s.note}${keyFor(s) ? ' · connected' : ''}`]));
+    if (i < 0) return note('menu closed');
+    service = keyed[i];
+  }
+  const a = /^[aeiox]/i.test(service.name) ? 'an' : 'a';
+  const typed = ((await readSecret(`  ${service.name} key from ${service.site} (hidden. Enter saves, Esc cancels): `)) ?? '').trim();
   if (!typed) return note('no key saved');
-  if (/\s/.test(typed) || typed.length < 20) return note('that does not look like an OpenAI key, so nothing was saved. a key is one long word');
-  saveOpenaiKey(typed);
-  note(`saved in your Mac's Keychain. /voice starts ChatGPT voice${process.env.OPENAI_API_KEY?.trim() ? '. OPENAI_API_KEY is set in this shell and is used first' : ''}`);
+  if (/\s/.test(typed) || typed.length < 20) return note(`that does not look like ${a} ${service.name} key, so nothing was saved. a key is one long word`);
+  saveKey(service.id, typed);
+  // Its models join the list on the next /model.
+  markStale();
+  const what = service.id === 'openai' ? '/voice starts ChatGPT voice, and /model has GPT' : `/model has ${service.name}'s models`;
+  note(`saved in your Mac's Keychain. ${what}${process.env[service.env]?.trim() ? `. ${service.env} is set in this shell and is used first` : ''}`);
 }
 
 const commands = {

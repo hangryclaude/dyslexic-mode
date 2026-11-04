@@ -1,9 +1,10 @@
 import { after } from 'node:test';
 import assert from 'node:assert/strict';
 import { spawn } from 'node:child_process';
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readFileSync, writeFileSync, symlinkSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { SERVICES } from '../../lib/providers/services.mjs';
 
 export const APP = fileURLToPath(new URL('../../bin/dyslexic-mode.mjs', import.meta.url));
 export const FAKE = fileURLToPath(new URL('./fake-claude.mjs', import.meta.url));
@@ -39,12 +40,20 @@ export const isChat = launch => launch.argv.includes('--input-format');
 // test from starting in full access.
 export function run(args, home, log, env = {}, { noTools = true } = {}) {
   const fakes = join(dirname(home), 'fakes');
+  // The Keychain is a fake with nothing in it, every service's key in this shell is hidden, and
+  // every service points at a port where nothing listens, so a refresh asks nobody real.
+  mkdirSync(join(fakes, 'bin'), { recursive: true });
+  if (!existsSync(join(fakes, 'bin', 'security'))) symlinkSync(fileURLToPath(new URL('./fake-security.mjs', import.meta.url)), join(fakes, 'bin', 'security'));
+  const services = Object.fromEntries(SERVICES.flatMap(s => [[`${s.id.toUpperCase()}_BASE_URL`, 'http://127.0.0.1:9/v1'], ...(s.env ? [[s.env, '']] : [])]));
   mkdirSync(join(fakes, 'grok-state'), { recursive: true });
   mkdirSync(join(fakes, 'grok-home'), { recursive: true });
   writeFileSync(join(fakes, 'grok-home', 'models_cache.json'), JSON.stringify({ models: { 'grok-4.7': { info: { context_window: 256000 } } } }));
   const child = spawn(process.execPath, [APP, '--calm', ...(noTools ? ['--no-tools'] : []), ...args], {
     env: {
       ...process.env,
+      ...services,
+      PATH: `${join(fakes, 'bin')}:${process.env.PATH}`,
+      FAKE_KEYCHAIN: join(fakes, 'keychain.json'),
       DYSLEXIC_CLAUDE_BIN: FAKE,
       DYSLEXIC_GROK_BIN: FAKE_GROK,
       DYSLEXIC_OPENCODE_BIN: FAKE_OPENCODE,
