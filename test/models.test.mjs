@@ -4,7 +4,7 @@ import { readFileSync, writeFileSync, mkdirSync, mkdtempSync, existsSync } from 
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { listModels, refreshModels, cachedModels, resolveModel, openSessionFor, learnContextWindow, contextWindowOf, CLAUDE_MODELS } from '../lib/models.mjs';
+import { listModels, refreshModels, cachedModels, resolveModel, openSessionFor, canonicalModel, providerOf, askFor, learnContextWindow, contextWindowOf, CLAUDE_MODELS } from '../lib/models.mjs';
 
 const fixture = name => fileURLToPath(new URL(`./fixtures/${name}`, import.meta.url));
 const GROK = fixture('fake-grok.mjs'), OPENCODE = fixture('fake-opencode.mjs'), CLAUDE = fixture('fake-claude.mjs');
@@ -109,4 +109,66 @@ test('openSessionFor opens the provider an id names, with the same session shape
 
   for (const id of ['grok/grok-4.7', 'opencode-go/gemini-4-argon']) assert.throws(() => openSessionFor(id, { system: 'SYS', tools: true }), /full access works with Claude only/);
   assert.throws(() => openSessionFor('mystery', { system: 'SYS' }), /no model called/);
+});
+
+test('canonicalModel names a model the way the registry does, and providerOf says who takes it', () => {
+  const list = [...CLAUDE_MODELS, { id: 'grok/grok-4.7', label: 'grok-4.7', provider: 'grok', model: 'grok-4.7' }];
+  assert.equal(canonicalModel('sonnet', list), 'claude/sonnet');
+  assert.equal(canonicalModel('claude/sonnet', list), 'claude/sonnet');
+  assert.equal(canonicalModel('grok-4.7', list), 'grok/grok-4.7');
+  assert.equal(canonicalModel('opus[1m]', list), 'opus[1m]', 'an id the registry does not list is left as it is');
+  assert.equal(canonicalModel('gemini', list), 'gemini', 'and so is a name nobody takes');
+  assert.equal(canonicalModel(undefined, list), undefined);
+  assert.equal(canonicalModel(null, list), null);
+  for (const [id, who] of [['sonnet', 'claude'], ['opus[1m]', 'claude'], [undefined, 'claude'], ['grok/grok-4.7', 'grok'], ['opencode-go/gemini-4-argon', 'opencode'], ['gemini', null]]) {
+    assert.equal(providerOf(id, list), who, String(id));
+  }
+});
+
+const gone = async pid => {
+  for (let i = 0; i < 60; i++) {
+    try { process.kill(pid, 0); } catch { return true; }
+    await new Promise(r => setTimeout(r, 50));
+  }
+  return false;
+};
+
+test('askFor asks one question on whichever provider the id names, with the system prompt, and leaves nothing running', async () => {
+  const flag = (argv, name) => argv[argv.indexOf(name) + 1];
+
+  const claude = await askFor('claude/sonnet', 'hi', { system: 'SYS', bin: CLAUDE });
+  assert.equal(claude.text, 'echo: hi');
+  const claudeArgv = launches().at(-1).argv;
+  assert.equal(flag(claudeArgv, '--model'), 'sonnet');
+  assert.equal(flag(claudeArgv, '--system-prompt'), 'SYS');
+  assert.ok(!claudeArgv.includes('--input-format'), 'claude has a one-shot call of its own');
+
+  const grok = await askFor('grok/grok-4.7', 'hi', { system: 'SYS', bin: GROK });
+  assert.equal(grok.text, 'echo: hi');
+  const grokArgv = launches().at(-1).argv;
+  assert.equal(flag(grokArgv, '--model'), 'grok-4.7');
+  assert.ok(grokArgv.includes('--system-prompt-override=SYS'));
+
+  const before = launches().length;
+  const oc = await askFor('opencode-go/gemini-4-argon', 'hi', { system: 'SYS', bin: OPENCODE });
+  assert.equal(oc.text, 'echo: hi');
+  const server = launches().at(before);
+  assert.equal(server.config.agents['dyslexic-chat'].system, 'SYS');
+  assert.ok(await gone(server.pid), 'the server opened for the question is closed after it');
+});
+
+test('a question that fails rejects with the provider\'s own message, and one that is stopped rejects as stopped and ends its process', async () => {
+  await assert.rejects(askFor('grok/grok-4.7', 'FAIL it', { bin: GROK }), /boom/);
+
+  const ctl = new AbortController();
+  const asked = askFor('grok/grok-4.7', 'SLOW question', { bin: GROK, signal: ctl.signal });
+  for (let i = 0; i < 100 && !launches().some(l => l.argv.some(a => a.startsWith('--single=SLOW'))); i++) await new Promise(r => setTimeout(r, 20));
+  ctl.abort();
+  await assert.rejects(asked, err => err.name === 'AbortError');
+  const slow = launches().find(l => l.argv.some(a => a.startsWith('--single=SLOW')));
+  assert.ok(await gone(slow.pid), 'the process is ended');
+
+  const before = launches().length;
+  await assert.rejects(askFor('grok/grok-4.7', 'hi', { bin: GROK, signal: AbortSignal.abort() }), err => err.name === 'AbortError');
+  assert.equal(launches().length, before, 'a call that is already stopped starts nothing');
 });

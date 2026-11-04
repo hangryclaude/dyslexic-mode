@@ -3,9 +3,10 @@
 //   picture     the answering model gets the PNG and the bare ask. It never reads the question.
 //   whiteboard  it gets the PNG and the full question (Whiteboard-of-Thought), so a gain tells
 //               "the picture helps" apart from "the picture is all there is".
-// Both are async ({ model, item, runText, runImage }) => { text, calls, png }. runText(model, prompt)
-// and runImage(model, pngPath, prompt) resolve to the reply text; claudeText and claudeImage below
-// are that pair for the logged-in `claude` CLI.
+// Both are async ({ model, item, runText, runImage }) => { text, calls, png }, like every condition
+// in conditions.mjs. runText({ model, prompt }) and runImage({ model, pngPath, prompt }) are the
+// two runners in runners.mjs, passed in by run.mjs, which counts and caps them. There is no second
+// Claude helper here: the one runImage is the only code that sends a picture to a model.
 import { spawn } from 'node:child_process';
 import { randomBytes } from 'node:crypto';
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
@@ -17,7 +18,6 @@ const WORK = join(dirname(fileURLToPath(import.meta.url)), '.work');
 const PNG = Buffer.from('89504e470d0a1a0a', 'hex');
 const NS = 'http://www.w3.org/2000/svg';
 const XLINK = 'http://www.w3.org/1999/xlink';
-const SYSTEM = 'You are a helpful assistant.';
 
 // Scratch space for pictures and throwaway browser profiles. It ignores itself, so the repo's
 // .gitignore needs no line for it.
@@ -28,11 +28,11 @@ function workDir(dir = WORK) {
   return dir;
 }
 
-// Runs a program to its end and keeps what it printed. It rejects only when the program cannot
-// start or hangs. Callers read the exit code themselves, because claude reports its errors as JSON.
-function capture(cmd, args, { input = '', env, cwd, timeout = 120_000 } = {}) {
+// Runs a renderer to its end and keeps what it printed. It rejects only when the program cannot
+// start or hangs. Callers read the exit code themselves.
+function capture(cmd, args, { input = '', timeout = 120_000 } = {}) {
   return new Promise((ok, no) => {
-    const child = spawn(cmd, args, { stdio: ['pipe', 'pipe', 'pipe'], env, cwd, timeout });
+    const child = spawn(cmd, args, { stdio: ['pipe', 'pipe', 'pipe'], timeout });
     let stdout = '', stderr = '';
     child.stdout.on('data', d => { stdout += d; });
     child.stderr.on('data', d => { stderr += d; });
@@ -212,10 +212,10 @@ const slug = s => String(s).toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^
 async function throughPicture(condition, answerPrompt, { model, item, runText, runImage, render = renderPng, dir, name }) {
   const question = fullQuestion(item);
   let calls = 1;
-  let svg = extractSvg(asText(await runText(model, drawPrompt(question))));
+  let svg = extractSvg(asText(await runText({ model, prompt: drawPrompt(question) })));
   if (!svg) {
     calls++;
-    svg = extractSvg(asText(await runText(model, drawPrompt(question, true))));
+    svg = extractSvg(asText(await runText({ model, prompt: drawPrompt(question, true) })));
   }
   if (!svg) throw new Error(`${item.id}: the model drew no SVG in ${calls} tries`);
   const where = dir ?? join(workDir(), 'pictures');
@@ -223,54 +223,9 @@ async function throughPicture(condition, answerPrompt, { model, item, runText, r
   const base = resolve(where, name ?? `${slug(item.id)}-${condition}-${slug(model)}-${randomBytes(3).toString('hex')}`);
   writeFileSync(`${base}.svg`, svg);
   await render(svg, `${base}.png`);
-  const text = asText(await runImage(model, `${base}.png`, answerPrompt(item)));
+  const text = asText(await runImage({ model, pngPath: `${base}.png`, prompt: answerPrompt(item) }));
   return { text, calls: calls + 1, png: `${base}.png` };
 }
 
 export const picture = args => throughPicture('picture', picturePrompt, args);
 export const whiteboard = args => throughPicture('whiteboard', whiteboardPrompt, args);
-
-// --- the logged-in claude CLI ------------------------------------------------------------------
-
-// Plain mode, as in the app: no tools and no settings, so CLAUDE.md and hooks never reach the
-// model. CODEX_BRIDGE=1 keeps the user's Stop hook from asking Codex what to do when a reply ends
-// on a question. Sessions are not saved: a bench makes hundreds of calls. Run from the work
-// folder, so no project's CLAUDE.md sits above the working directory.
-function claude(model, extra, input) {
-  const args = ['-p', '--model', model.replace(/^claude:/, ''), '--tools', '', '--setting-sources', '', '--system-prompt', SYSTEM, '--no-session-persistence', ...extra];
-  return capture(process.env.DYSLEXIC_CLAUDE_BIN || 'claude', args, {
-    input, env: { ...process.env, CODEX_BRIDGE: '1' }, cwd: workDir(), timeout: 300_000,
-  });
-}
-
-// `--output-format json` prints one object, stream-json one event per line. Anything that is not
-// JSON is dropped, so a failure with no result falls through to what claude said on stderr.
-function events(stdout) {
-  try { return [JSON.parse(stdout)].flat(); } catch {}
-  return stdout.split('\n').flatMap(line => { try { return [JSON.parse(line)]; } catch { return []; } });
-}
-
-// Both output modes end in one `result` event, and an error is a result too.
-function finish(r) {
-  const result = events(r.stdout).findLast(e => e?.type === 'result');
-  if (result && !result.is_error && result.subtype === 'success') return result.result;
-  throw new Error(String(result?.result || result?.subtype || tail(r.stderr) || `claude exited ${r.code} with no result`));
-}
-
-export async function claudeText(model, prompt) {
-  return finish(await claude(model, ['--output-format', 'json'], prompt));
-}
-
-export async function claudeImage(model, pngPath, prompt) {
-  const message = {
-    type: 'user',
-    message: {
-      role: 'user',
-      content: [
-        { type: 'image', source: { type: 'base64', media_type: 'image/png', data: readFileSync(pngPath).toString('base64') } },
-        { type: 'text', text: prompt },
-      ],
-    },
-  };
-  return finish(await claude(model, ['--input-format', 'stream-json', '--output-format', 'stream-json', '--verbose'], `${JSON.stringify(message)}\n`));
-}

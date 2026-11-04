@@ -5,7 +5,7 @@ import { readFileSync } from 'node:fs';
 import { MENU, GROUPS, distance, resolve } from '../lib/commands.mjs';
 import { PALETTES, NAMES, grad, setPalette, nextPalette, randomPalette, palette } from '../lib/palette.mjs';
 import { renderBrain, LOBES } from '../lib/brain.mjs';
-import { menu } from '../lib/anim.mjs';
+import { menu, secret } from '../lib/anim.mjs';
 import { APP } from './fixtures/app.mjs';
 
 const NAMES_TYPED = MENU.map(([n]) => n).filter(n => n !== '!');
@@ -38,10 +38,12 @@ test('a start that two commands share is not guessed, but a start only one has i
     assert.equal(resolve(typed, NAMES_TYPED), meant, typed);
 });
 
-test('the read-aloud commands are gone: /read finds nothing, and /voice is the ChatGPT placeholder', () => {
+test('the read-aloud commands are gone: /read finds nothing, and /voice and /key are for ChatGPT voice', () => {
   assert.equal(resolve('/read', NAMES_TYPED), null);
   assert.equal(resolve('/raed', NAMES_TYPED), null);
-  assert.ok(MENU.some(([n, help]) => n === '/voice' && /ChatGPT/.test(help)));
+  assert.ok(MENU.some(([n, help]) => n === '/voice' && /ChatGPT voice/.test(help)));
+  assert.ok(MENU.some(([n, help]) => n === '/key' && /OpenAI key/.test(help)));
+  assert.equal(resolve('/kye', NAMES_TYPED), '/key');
 });
 
 test('the menu covers every command once, with the flag first', () => {
@@ -55,7 +57,7 @@ test('the groups hold every command, each with a one-line description, and /help
     assert.ok(title && items.length, title);
     for (const [name, help] of items) assert.ok(/^[!/]/.test(name) && help && !help.includes('\n'), name);
   }
-  for (const name of ['/help', '/model', '/context', '/compact', '/clear', '/status', '/think', '/plan', '/export', '/copy', '/voice', '/resume', '/new', '/test', '/stats', '/profile', '/tools', '/color', '/brain', '/calm', '/pliny', '/exit'])
+  for (const name of ['/help', '/model', '/context', '/compact', '/clear', '/status', '/think', '/plan', '/export', '/copy', '/voice', '/key', '/resume', '/new', '/test', '/stats', '/profile', '/tools', '/color', '/brain', '/calm', '/pliny', '/exit'])
     assert.ok(MENU.some(([n]) => n === name), name);
 });
 
@@ -121,6 +123,21 @@ test('a short menu is drawn whole, and a long name widens its column', async () 
   assert.match(t.out.text, /claude-opus-4-5-20251101 Opus/);
 });
 
+test('a name column can be allowed to grow wider than the usual 24 for long model ids', async () => {
+  delete process.env.NO_COLOR;
+  const long = 'opencode-go/nemotron-3.5-super-vl-free';
+  const narrow = terminal({ columns: 120 });
+  const a = menu(narrow.out, narrow.input, [[long, 'Nemotron'], ['claude/opus', 'Opus']]);
+  narrow.press(undefined, { name: 'return' });
+  await a;
+  assert.match(narrow.out.text, /opencode-go\/nemotron-3\.5-super-vl-free Nemotron/);
+  const wide = terminal({ columns: 120 });
+  const b = menu(wide.out, wide.input, [[long, 'Nemotron'], ['claude/opus', 'Opus']], { nameMax: 40 });
+  wide.press(undefined, { name: 'return' });
+  await b;
+  assert.match(wide.out.text, new RegExp(`claude/opus${' '.repeat(long.length - 'claude/opus'.length)} Opus`), 'the short name is padded to the long one');
+});
+
 test('palettes: ends match the stops, and the hue ping-pongs instead of jumping', () => {
   for (const name of NAMES) {
     setPalette(name);
@@ -145,4 +162,36 @@ test('the brain is coloured by lobe, and a side view shows at least four of them
   const parts = new Set(renderBrain({ cols: 70, rows: 28, angle: Math.PI / 2 }).flat().filter(Boolean).map(c => c.part));
   assert.ok(parts.size >= 4, [...parts].join(','));
   for (const p of parts) assert.ok(p in LOBES);
+});
+
+test('a secret is typed with nothing shown, backspace works, Enter returns it, and readline gets its keys back', async () => {
+  const t = terminal();
+  const readline = () => {};
+  t.input.on('keypress', readline);
+  const got = secret(t.out, t.input, 'key: ');
+  assert.deepEqual(t.input.listeners('keypress').includes(readline), false, 'readline is set aside while the secret is typed');
+  for (const ch of 'sk-abcx') t.press(ch, { name: ch });
+  t.press(undefined, { name: 'backspace' });
+  t.press('\t', { name: 'tab' });
+  t.press('\x01', { name: 'a', ctrl: true });
+  t.press('\x1b[200~', { name: undefined });
+  t.press('12', { name: undefined });
+  t.press(undefined, { name: 'return' });
+  assert.equal(await got, 'sk-abc12');
+  assert.equal(t.out.text, 'key: \n', 'only the prompt and the line break were drawn, never a letter of it');
+  assert.deepEqual(t.input.listeners('keypress'), [readline]);
+});
+
+test('Esc or Ctrl-C gives up on a secret and returns null, with the keys given back and nothing kept', async () => {
+  for (const key of [{ name: 'escape' }, { name: 'c', ctrl: true }]) {
+    const t = terminal();
+    const readline = () => {};
+    t.input.on('keypress', readline);
+    const got = secret(t.out, t.input, 'key: ');
+    t.press('a', { name: 'a' });
+    t.press(undefined, key);
+    assert.equal(await got, null);
+    assert.deepEqual(t.input.listeners('keypress'), [readline]);
+    assert.equal(t.out.text, 'key: \n');
+  }
 });

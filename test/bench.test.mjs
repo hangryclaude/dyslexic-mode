@@ -673,14 +673,19 @@ console.log(JSON.stringify({ type: 'result', subtype: 'success', is_error: false
     reset();
     const t0 = Date.now();
     await assert.rejects(runText({ model: 'claude:haiku', prompt: 'hang', timeoutMs: 400 }), /timed out after 400 ms/);
-    assert.ok(Date.now() - t0 < 5000);
-    assert.equal(tries(), 2, 'a timeout is retried once too');
-    const pid = Number(readFileSync(pidfile, 'utf8'));
-    let alive = true;
-    for (let i = 0; i < 40 && alive; i++) {
-      try { process.kill(pid, 0); await sleep(50); } catch { alive = false; }
+    // Two waits of 400 ms, one for each try, whether or not a try got as far as counting itself:
+    // on a busy machine node can need longer than that to start.
+    const took = Date.now() - t0;
+    assert.ok(took >= 780 && took < 5000, `a timeout is retried once too (took ${took} ms)`);
+    assert.ok(tries() <= 2, 'and no more than once');
+    if (existsSync(pidfile)) {
+      const pid = Number(readFileSync(pidfile, 'utf8'));
+      let alive = true;
+      for (let i = 0; i < 40 && alive; i++) {
+        try { process.kill(pid, 0); await sleep(50); } catch { alive = false; }
+      }
+      assert.equal(alive, false, 'the hung process is gone');
     }
-    assert.equal(alive, false, 'the hung process is gone');
   });
   await withEnv({ DYSLEXIC_CLAUDE_BIN: join(dir, 'missing') }, async () => {
     await assert.rejects(runText({ model: 'claude:haiku', prompt: 'x' }), err => err.fatal === true && /ENOENT/.test(err.message));

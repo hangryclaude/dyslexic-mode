@@ -108,3 +108,16 @@ test('summarize reports how fast the first line shows', () => {
   const s = Object.fromEntries(summarize({ chats: [{ first: 900 }, { first: 1500 }, {}], tests: [], flags: [] }));
   assert.equal(s['First line shown'], '1.2s');
 });
+
+test('a past chat remembers the model that began it, and a row from before models were logged has none', () => {
+  const chats = [
+    { ts: 1, session: 'old', q: 'before models', text: 'r0' },
+    { ts: 2, session: 'grok', q: 'on grok', text: 'r1', model: 'grok/grok-4.7' },
+    { ts: 3, session: 'grok', q: 'still grok', text: 'r2', model: 'grok/grok-4.7' },
+    { ts: 4, session: 'plain', q: 'default model', text: 'r3', model: null },
+  ];
+  const byId = Object.fromEntries(sessions(chats).map(x => [x.id, x]));
+  assert.equal(byId.grok.model, 'grok/grok-4.7');
+  assert.equal(byId.plain.model, null);
+  assert.ok(!('model' in byId.old));
+});

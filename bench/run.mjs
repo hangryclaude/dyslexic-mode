@@ -6,15 +6,17 @@
 // --scale 3 makes walk, dice, arith and letters three times as long, for a model that already gets most standard items right.
 import { appendFileSync, existsSync, mkdirSync, readFileSync, realpathSync } from 'node:fs';
 import { dirname } from 'node:path';
-import { fileURLToPath, pathToFileURL } from 'node:url';
+import { fileURLToPath } from 'node:url';
 import { parseArgs } from 'node:util';
 import { CONDITIONS, styled } from './conditions.mjs';
+import { picture, whiteboard } from './picture.mjs';
 import * as realRunners from './runners.mjs';
 import { readRows, rowKey } from './stats.mjs';
 import { FAMILIES, makeItems, score, shuffled } from './tasks.mjs';
 
-const PICTURE = fileURLToPath(new URL('./picture.mjs', import.meta.url));
-const PICTURE_CONDS = ['picture', 'whiteboard'];
+// The text conditions live in conditions.mjs. The two that draw the question first live in
+// picture.mjs, and get the same runText and runImage as every other condition.
+export const ALL_CONDITIONS = { ...CONDITIONS, picture, whiteboard };
 const DEFAULT_CONC = { claude: 6, opencode: 6, grok: 3 };
 const { backendOf } = realRunners;
 
@@ -131,11 +133,7 @@ async function main() {
   });
   const fail = msg => { console.error(msg); process.exit(2); };
 
-  const available = { ...CONDITIONS };
-  // The picture conditions are written separately. Without their file they are skipped, loudly.
-  let picture = null;
-  if (existsSync(PICTURE)) picture = await import(pathToFileURL(PICTURE).href);
-  if (picture) for (const name of PICTURE_CONDS) available[name] = picture[name];
+  const available = { ...ALL_CONDITIONS };
   // --style name=path/to/text.txt adds a condition that asks with that thinking style.
   for (const spec of v.style ?? []) {
     const [name, path] = spec.split('=');
@@ -143,10 +141,7 @@ async function main() {
     available[name] = styled(readFileSync(path, 'utf8').trim());
   }
 
-  const wanted = list(v.conds) ?? [...Object.keys(CONDITIONS), ...PICTURE_CONDS, ...(v.style ?? []).map(s => s.split('=')[0])];
-  const skipped = wanted.filter(c => PICTURE_CONDS.includes(c) && !picture);
-  if (skipped.length) console.error(`warning: skipping ${skipped.join(', ')}: bench/picture.mjs does not exist yet`);
-  const names = wanted.filter(c => !skipped.includes(c));
+  const names = list(v.conds) ?? Object.keys(available);
   const unknown = names.filter(c => !available[c]);
   if (unknown.length) fail(`unknown condition ${unknown.join(', ')}. Available: ${Object.keys(available).join(', ')}`);
 
