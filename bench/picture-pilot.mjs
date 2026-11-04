@@ -7,7 +7,8 @@
 import { mkdirSync, writeFileSync } from 'node:fs';
 import { dirname, join, relative } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { picture, whiteboard, renderPng, claudeText, claudeImage } from './picture.mjs';
+import { picture, whiteboard, renderPng } from './picture.mjs';
+import { runText, runImage } from './runners.mjs';
 
 const arg = (name, fallback) => {
   const at = process.argv.indexOf(`--${name}`);
@@ -56,7 +57,7 @@ async function proof() {
   const png = join(OUT, 'digit-7.png');
   const via = await renderPng(SEVEN, png);
   const t = Date.now();
-  const reply = await claudeImage(model, png, 'What digit is shown in the picture? Reply with the digit only.');
+  const { text: reply } = await runImage({ model, pngPath: png, prompt: 'What digit is shown in the picture? Reply with the digit only.' });
   return { question: 'What digit is shown in the picture?', reply, ok: reply.trim() === '7', ms: Date.now() - t, via };
 }
 
@@ -79,8 +80,8 @@ async function run(item, name, condition) {
   try {
     const r = await condition({
       model, item, render, dir: OUT, name: `${item.id}.${name}`,
-      runText: timed('draw', claudeText),
-      runImage: timed('answer', claudeImage),
+      runText: timed('draw', runText),
+      runImage: timed('answer', runImage),
     });
     Object.assign(row, { given: given(r.text), ok: norm(given(r.text)) === norm(item.answer), calls: r.calls, png: relative(OUT, r.png), reply: r.text });
   } catch (err) {

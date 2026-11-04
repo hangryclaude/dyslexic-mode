@@ -1,17 +1,19 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
-import { existsSync, mkdtempSync, readFileSync, readdirSync, realpathSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdtempSync, readFileSync, readdirSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import {
   extractSvg, prepareSvg, htmlPage, needsBrowser, renderPng,
-  drawPrompt, picturePrompt, whiteboardPrompt, picture, whiteboard, claudeText, claudeImage,
+  drawPrompt, picturePrompt, whiteboardPrompt, picture, whiteboard,
 } from '../bench/picture.mjs';
+import { runText, runImage } from '../bench/runners.mjs';
+import { ALL_CONDITIONS } from '../bench/run.mjs';
+import { CONDITIONS } from '../bench/conditions.mjs';
 
 const FAKE = fileURLToPath(new URL('./fixtures/fake-claude-picture.mjs', import.meta.url));
-const WORK = fileURLToPath(new URL('../bench/.work', import.meta.url));
 const CHROME = '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome';
 const PNG = Buffer.from('89504e470d0a1a0a', 'hex');
 const tmp = () => mkdtempSync(join(tmpdir(), 'dm-pic-'));
@@ -140,8 +142,8 @@ function fakes({ texts = [REPLY], answer = 'ANSWER: 4,2' } = {}) {
   const seen = { text: [], image: [], render: [] };
   return {
     seen,
-    runText: async (model, prompt) => { seen.text.push({ model, prompt }); return texts[Math.min(seen.text.length, texts.length) - 1]; },
-    runImage: async (model, png, prompt) => { seen.image.push({ model, png, prompt }); return answer; },
+    runText: async ({ model, prompt }) => { seen.text.push({ model, prompt }); return { text: texts[Math.min(seen.text.length, texts.length) - 1] }; },
+    runImage: async ({ model, pngPath, prompt }) => { seen.image.push({ model, png: pngPath, prompt }); return { text: answer }; },
     render: async (svg, png) => { seen.render.push({ svg, png }); writeFileSync(png, PNG); },
   };
 }
@@ -222,6 +224,17 @@ test('pictures never collide by default, and a name pins the file', async () => 
   assert.equal(named.png, join(dir, 'grid-walk.whiteboard.png'));
 });
 
+test('the bench offers picture and whiteboard beside the text conditions, with no warning and no skipping', () => {
+  assert.equal(ALL_CONDITIONS.picture, picture);
+  assert.equal(ALL_CONDITIONS.whiteboard, whiteboard);
+  for (const name of Object.keys(CONDITIONS)) assert.equal(ALL_CONDITIONS[name], CONDITIONS[name], name);
+  const run = fileURLToPath(new URL('../bench/run.mjs', import.meta.url));
+  const dry = spawnSync(process.execPath, [run, '--dry', '--models', 'claude:haiku', '--families', 'walk', '--per', '1'], { encoding: 'utf8' });
+  assert.equal(dry.status, 0, dry.stderr);
+  assert.match(dry.stdout, /conditions: base, careful, dyslexic, strong, extreme, scrambled, explorer, vote3, picture, whiteboard\n/);
+  assert.equal(dry.stderr, '', 'nothing is skipped');
+});
+
 // --- rendering, for real ---------------------------------------------------------------------
 
 test('renderPng draws a 900 by 900 PNG with rsvg-convert, even from SVG a strict parser refuses', { skip: !haveRsvg }, async () => {
@@ -260,45 +273,30 @@ test('renderPng names why each renderer failed when none worked', async () => {
   }
 });
 
-// --- the claude helpers, against a fake CLI --------------------------------------------------
+// --- through the real runners, against a fake CLI --------------------------------------------
 
+// There is one Claude image helper, runImage in bench/runners.mjs (its own flags, bridge marker and
+// errors are tested in bench.test.mjs). These check that the two conditions and that helper fit:
+// run.mjs hands the conditions exactly these functions.
 process.env.DYSLEXIC_CLAUDE_BIN = FAKE;
-const launch = log => JSON.parse(readFileSync(log, 'utf8').trim().split('\n').pop());
+const launches = log => readFileSync(log, 'utf8').trim().split('\n').map(l => JSON.parse(l));
 const flag = (argv, name) => argv[argv.indexOf(name) + 1];
 
-test('claudeText runs plain claude with the bridge marker and returns the result text', async () => {
-  const log = join(tmp(), 'argv');
-  process.env.FAKE_LOG = log;
-  assert.equal(await claudeText('claude:haiku', '-starts with a dash'), 'echo: -starts with a dash');
-  const { argv, bridge, cwd } = launch(log);
-  for (const [name, value] of [['--model', 'haiku'], ['--tools', ''], ['--setting-sources', ''], ['--system-prompt', 'You are a helpful assistant.'], ['--output-format', 'json']]) assert.equal(flag(argv, name), value, name);
-  assert.ok(argv.includes('-p') && argv.includes('--no-session-persistence'));
-  assert.ok(!argv.includes('--input-format'));
-  assert.equal(bridge, '1');
-  assert.equal(realpathSync(cwd), realpathSync(WORK));
-  assert.equal(readFileSync(join(WORK, '.gitignore'), 'utf8'), '*\n');
-});
-
-test('claudeImage sends the PNG as an image block over stream-json and returns the result text', async () => {
-  const log = join(tmp(), 'argv'), png = join(tmp(), 'p.png');
-  process.env.FAKE_LOG = log;
-  writeFileSync(png, Buffer.concat([PNG, Buffer.from('rest')]));
-  assert.equal(await claudeImage('sonnet', png, 'What is it?'), 'image image/png png=true bytes=12; echo: What is it?');
-  const { argv, bridge } = launch(log);
-  for (const [name, value] of [['--model', 'sonnet'], ['--tools', ''], ['--setting-sources', ''], ['--input-format', 'stream-json'], ['--output-format', 'stream-json']]) assert.equal(flag(argv, name), value, name);
-  assert.ok(argv.includes('--verbose'));
-  assert.equal(bridge, '1');
-});
-
-test('claude errors surface as the CLI\'s own message, and a missing claude rejects', async () => {
-  const png = join(tmp(), 'p.png');
-  writeFileSync(png, PNG);
-  await assert.rejects(claudeText('haiku', 'FAIL now'), /boom/);
-  await assert.rejects(claudeImage('haiku', png, 'FAIL now'), /boom/);
-  process.env.DYSLEXIC_CLAUDE_BIN = '/nonexistent/claude';
-  try {
-    await assert.rejects(claudeText('haiku', 'hi'), /ENOENT/);
-  } finally {
-    process.env.DYSLEXIC_CLAUDE_BIN = FAKE;
+test('both conditions draw with runText and read the picture with runImage, over the real claude runner', async () => {
+  for (const [name, condition, prompt] of [['picture', picture, picturePrompt], ['whiteboard', whiteboard, whiteboardPrompt]]) {
+    const log = join(tmp(), 'argv');
+    process.env.FAKE_LOG = log;
+    const r = await condition({ model: 'claude:haiku', item, dir: tmp(), render: fakes().render, runText, runImage });
+    assert.equal(r.calls, 2, name);
+    assert.equal(r.text, `image image/png png=true bytes=8; echo: ${prompt(item)}`, name);
+    const [draw, answer] = launches(log);
+    assert.equal(flag(draw.argv, '--output-format'), 'json', 'the draw is a plain text call');
+    assert.ok(!draw.argv.includes('--input-format'));
+    assert.equal(flag(answer.argv, '--input-format'), 'stream-json', 'the answer sends the PNG as an image block');
+    for (const l of [draw, answer]) {
+      assert.equal(flag(l.argv, '--model'), 'haiku');
+      assert.equal(flag(l.argv, '--tools'), '');
+      assert.equal(l.bridge, '1');
+    }
   }
 });
