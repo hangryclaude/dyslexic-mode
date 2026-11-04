@@ -14,7 +14,7 @@ import { setPalette, randomPalette, nextPalette, palette, grad } from '../lib/pa
 import { intro, thinking, brainScreen, menu, secret, promptGlyph, swatch } from '../lib/anim.mjs';
 import { ESC, dim, fancy, fg, heading } from '../lib/style.mjs';
 import { stream } from '../lib/render.mjs';
-import { models, modelLine, findModel, byMaker, makerLine, nameOf, matching } from '../lib/modelmenu.mjs';
+import { models, modelLine, findModel, byMaker, makerLine, nameOf, routeOf, matching } from '../lib/modelmenu.mjs';
 import { makerOf } from '../lib/makers.mjs';
 import { SERVICES, findService } from '../lib/providers/services.mjs';
 import { contextWindow, estimateTokens, usedTokens, hasUsage, breakdown, barCounts, bar, FILL, count, share } from '../lib/context.mjs';
@@ -118,8 +118,35 @@ if (latest) { state.sessionId = latest.id; state.history = chatOf(latest.id); ba
 // Claude starts while the intro plays, so the first reply skips the start-up wait.
 warm();
 
+// The model in use as a name and a colour: its entry in the list, else the id as typed. No id at
+// all is Claude's own default.
+function current() {
+  const m = models().find(x => x.id === state.model)
+    ?? { id: state.model ?? 'claude', label: state.model ?? 'Claude', provider: providerOf(state.model) ?? 'claude', model: state.model };
+  return { name: nameOf(m), maker: makerOf(m), route: routeOf(m) };
+}
+const dot = color => (fancy(out) ? `${fg(color, '●')} ` : '');
+
+// Every company with a model you can reach, as a coloured dot and its family name, as many as fit,
+// then how many models in all. Before the first /model only Claude's are known.
+function aisLine() {
+  const list = models(), groups = byMaker(list), room = (out.columns || 80) - 4;
+  const total = `${count(list.length)} models${groups.length === 1 ? ' · /model finds every AI you can reach' : ''}`;
+  let line = '', used = 0, shown = 0;
+  for (const g of groups) {
+    const piece = `● ${g.maker.family}  `;
+    if (used + piece.length + total.length + 10 > room) break;
+    line += `${dot(g.maker.color) || '● '}${g.maker.family}  `;
+    used += piece.length;
+    shown++;
+  }
+  return `  ${line}${soft(`${groups.length > shown ? `+${groups.length - shown} more · ` : ''}${total}`)}`;
+}
+
 if (!state.calm) await intro(out);
-else out.write('\n  DYSLEXIC MODE\n\n  press / then Enter for the menu.\n\n');
+else out.write('\n  DYSLEXIC MODE\n\n  turn your agent dyslexic\n');
+out.write(aisLine() + '\n\n');
+out.write(soft('  press / then Enter for the menu.   ! flags a hard reply.') + '\n\n');
 const using = [state.tools ? 'full access: files, shell, web, your skills, Claude agents, Codex' : 'chat only: tools are off'];
 if (state.model) using.push(`model ${state.model}`);
 if (state.thinking !== 'off') using.push(`thinking ${state.thinking}`);
@@ -218,7 +245,9 @@ async function chat(msg) {
   const ms = Date.now() - t0;
   append('chats.jsonl', { ts: Date.now(), session: r.sessionId, q: msg.slice(0, 300), text: r.text, rewrites: r.rewrites, hard: r.hard, words: words(r.text), tools: state.tools, model: state.model ?? null, thinking: state.thinking, ms, first });
   const check = r.hard ? `${r.hard} hard hit left` : r.rewrites ? 'tidied once' : 're-read clean';
-  const tail = `${state.pliny ? `\n  ${DIVIDER}\n` : ''}\n` + soft(fit(`  ${(ms / 1000).toFixed(1)}s · ${check}${explorer ? ' · explored 3 ways' : ''} · ! if it tripped you`, (out.columns || 80) - 1)) + '\n\n';
+  // Which model wrote it, in its company's colour, since /model can change it at any turn.
+  const who = current();
+  const tail = `${state.pliny ? `\n  ${DIVIDER}\n` : ''}\n  ${dot(who.maker.color)}` + soft(fit(`${who.name} · ${(ms / 1000).toFixed(1)}s · ${check}${explorer ? ' · explored 3 ways' : ''} · ! if it tripped you`, (out.columns || 80) - 5)) + '\n\n';
   out.write(tail);
 }
 
@@ -357,8 +386,10 @@ function showContext() {
 
 function showStatus() {
   const window = windowNow();
+  const who = current();
   show(table([
     ['Model', state.model ?? 'default'],
+    ['From', `${who.maker.name}, via ${who.route}`],
     ['Thinking', state.thinking],
     ['Tools', state.tools ? 'on' : 'off'],
     ['Context', state.usage ? `${share(usedTokens(state.usage), window)} of ${count(window)}` : state.history.length ? 'not counted' : 'no reply yet'],
