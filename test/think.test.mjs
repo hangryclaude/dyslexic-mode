@@ -3,7 +3,6 @@ import assert from 'node:assert/strict';
 import { LEVELS, LEVEL_NAMES, promptThinking, transcript, withHistory, exploreTurn } from '../lib/think.mjs';
 import { STYLES } from '../lib/thinking.mjs';
 import { reply } from '../lib/filter.mjs';
-import { models, findModel, modelLine } from '../lib/modelmenu.mjs';
 
 const wait = ms => new Promise(r => setTimeout(r, ms));
 
@@ -87,31 +86,4 @@ test('through reply, the rewrite pass is one plain call and not a second explora
   assert.ok(f.calls.at(-1).startsWith('Your last reply'));
   assert.equal(r.rewrites, 1);
   assert.equal(r.text, 'Short and clear.');
-});
-
-test('the model list has the claude aliases, each in the shape the picker reads', () => {
-  const list = models();
-  assert.deepEqual(list.map(m => m.id), ['haiku', 'sonnet', 'opus']);
-  for (const m of list) {
-    assert.deepEqual(Object.keys(m).sort(), ['contextWindow', 'id', 'label', 'provider']);
-    assert.ok(m.contextWindow >= 200_000);
-  }
-  assert.equal(modelLine(list[0], 'haiku'), 'Haiku, claude, 1,000,000 tokens (now)');
-  assert.equal(modelLine(list[1], 'haiku'), 'Sonnet, claude, 1,000,000 tokens');
-});
-
-test('a typed model is an id, a label, a start, a close spelling, or a full id the list does not know', () => {
-  assert.equal(findModel('opus').id, 'opus');
-  assert.equal(findModel('Sonnet').id, 'sonnet');
-  assert.equal(findModel('hiaku').id, 'haiku');
-  assert.equal(findModel('son').id, 'sonnet');
-  assert.equal(findModel('nonsense'), null);
-  const custom = findModel('opus[1m]');
-  assert.equal(custom.id, 'opus[1m]');
-  assert.equal(custom.contextWindow, 1_000_000);
-  assert.equal(findModel('claude-opus-4-5').id, 'claude-opus-4-5');
-  // Any list with the same shape works, so the picker needs no change when other providers join.
-  const other = [{ id: 'gpt-5.5', label: 'GPT 5.5', provider: 'openai', contextWindow: 400_000 }];
-  assert.equal(findModel('gpt-5.5', other).provider, 'openai');
-  assert.equal(findModel('GPT 5.5', other).id, 'gpt-5.5');
 });

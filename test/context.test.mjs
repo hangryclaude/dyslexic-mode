@@ -4,7 +4,7 @@ import { mkdtempSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { contextWindow, estimateTokens, usedTokens, measure, breakdown, barCounts, bar, count, share } from '../lib/context.mjs';
+import { contextWindow, estimateTokens, usedTokens, hasUsage, measure, breakdown, barCounts, bar, count, share } from '../lib/context.mjs';
 import { openSession } from '../lib/session.mjs';
 import { ask } from '../lib/claude.mjs';
 import { models } from '../lib/modelmenu.mjs';
@@ -136,4 +136,15 @@ test('ask reports usage and the window too, and a signal ends the call with an A
   setTimeout(() => ctl.abort(), 80);
   await assert.rejects(slow, { name: 'AbortError' });
   await assert.rejects(ask('hi', { system: 'S', bin: FAKE, signal: AbortSignal.abort() }), { name: 'AbortError' });
+});
+
+test('a provider\'s own total is the context used, and counts it did not report are not an empty context', () => {
+  // grok and opencode go through lib/usage.mjs, which has already added the cache and reasoning back in.
+  assert.equal(usedTokens({ input: 150, output: 11, cached: 50, contextUsed: 161 }), 161);
+  assert.equal(usedTokens({ input: null, output: null, cached: null, contextUsed: null }), 0);
+  assert.equal(hasUsage({ input: 150, output: 11, cached: 50, contextUsed: 161 }), true);
+  assert.equal(hasUsage({ input_tokens: 3, cache_read_input_tokens: 0, cache_creation_input_tokens: 0, output_tokens: 0 }), true, 'claude\'s four counts, even all zero');
+  assert.equal(hasUsage({ input: null, output: null, cached: null, contextUsed: null }), false);
+  assert.equal(hasUsage({}), false);
+  assert.equal(hasUsage(undefined), false);
 });

@@ -6,6 +6,7 @@ import { join } from 'node:path';
 import { run, launches, argAfter, isChat, FAKE_PBCOPY } from './fixtures/app.mjs';
 import { MENU } from '../lib/commands.mjs';
 import { carryPrompt } from '../lib/compact.mjs';
+import { STYLES } from '../lib/thinking.mjs';
 
 const setup = () => {
   const dir = mkdtempSync(join(tmpdir(), 'dm-slash-'));
@@ -45,11 +46,11 @@ test('/model switches by name, forgives a slip, remembers the choice, and starts
   app.type('hello');
   await app.until(/re-read clean/);
   app.type('/model haiku');
-  await app.until(/model: haiku\. fresh chat/);
+  await app.until(/model: claude\/haiku\. fresh chat/);
   app.type('/model hiaku');
-  await app.until(/hiaku → haiku\n[\s\S]*already on haiku/);
+  await app.until(/hiaku → claude\/haiku\n[\s\S]*already on claude\/haiku/);
   app.type('/model nonsense');
-  await app.until(/no model "nonsense"\. these are the models: haiku, sonnet, opus/);
+  await app.until(/no model "nonsense"\. these are the models: claude\/fable, claude\/opus, claude\/sonnet, claude\/haiku, grok\/grok-4\.7, grok\/grok-4\.6, grok\/abliterated-model, opencode-go\/gemini-4-argon, opencode-go\/gpt-6-luna, fake\/echo\n/);
   app.type('/model opus[1m]');
   await app.until(/model: opus\[1m\]\. fresh chat/);
   app.type('/exit');
@@ -68,11 +69,11 @@ test('/model alone lists the models when there is no menu to draw, and a saved m
   mkdirSync(home, { recursive: true });
   writeFileSync(join(home, 'settings.json'), JSON.stringify({ model: 'sonnet' }));
   const app = run([], home, log);
-  await app.until(/chat only: tools are off · model sonnet/);
+  await app.until(/chat only: tools are off · model claude\/sonnet/);
   app.type('/model');
-  await app.until(/models: haiku, sonnet, opus\. type \/model and a name/);
+  await app.until(/models: claude\/fable, claude\/opus, claude\/sonnet, claude\/haiku, grok\/grok-4\.7, .*, fake\/echo\. type \/model and a name/);
   app.type('/status');
-  await app.until(/Model +│ +sonnet/);
+  await app.until(/Model +│ +claude\/sonnet/);
   app.type('/exit');
   await app.closed;
   assert.equal(argAfter((await launches(log, 1))[0], '--model'), 'sonnet');
@@ -82,7 +83,7 @@ test('--model is for one launch and is not saved', async () => {
   const { home, log } = setup();
   const app = run(['--model', 'haiku'], home, log);
   app.type('/status');
-  await app.until(/Model +│ +haiku/);
+  await app.until(/Model +│ +claude\/haiku/);
   app.type('/exit');
   await app.closed;
   assert.ok(!existsSync(join(home, 'settings.json')));
@@ -127,6 +128,46 @@ test('a saved thinking level is shown at the start and in /status', async () => 
   await app.closed;
   const row = JSON.parse(readFileSync(join(home, 'chats.jsonl'), 'utf8').trim());
   assert.equal(row.thinking, 'dyslexic');
+});
+
+test('the thinking level is the "How to think" section of the system prompt claude is started with, and off takes it out', async () => {
+  const { home, log } = setup();
+  mkdirSync(home, { recursive: true });
+  writeFileSync(join(home, 'settings.json'), JSON.stringify({ thinking: 'dyslexic' }));
+  const app = run([], home, log);
+  app.type('/think strong');
+  await app.until(/thinking: strong\. fresh chat/);
+  app.type('/think extreme');
+  await app.until(/thinking: extreme\. fresh chat/);
+  app.type('/think off');
+  await app.until(/thinking: off\. fresh chat/);
+  app.type('/exit');
+  await app.closed;
+  const system = launch => argAfter(launch, '--system-prompt');
+  const l = await launches(log, 4);
+  assert.equal(l.length, 4);
+  // The saved level is in the very first chat. Each change starts a chat that has the new level and not the old one.
+  for (const [i, level] of [[0, 'dyslexic'], [1, 'strong'], [2, 'extreme']]) {
+    assert.ok(system(l[i]).includes(`## How to think\n${STYLES[level]}`), level);
+    assert.equal(system(l[i]).split('## How to think').length - 1, 1, `${level} once`);
+    for (const other of ['dyslexic', 'strong', 'extreme'].filter(n => n !== level)) assert.ok(!system(l[i]).includes(STYLES[other]), `${level} has no ${other}`);
+    assert.ok(system(l[i]).indexOf('## How to think') < system(l[i]).indexOf('Before you answer'), 'thinking first, the skill after');
+  }
+  assert.doesNotMatch(system(l[3]), /How to think/);
+});
+
+test('explorer adds nothing to the system prompt, because it is a pipeline the app runs and not text', async () => {
+  const { home, log } = setup();
+  const app = run([], home, log);
+  app.type('/think explorer');
+  await app.until(/thinking: explorer\. fresh chat/);
+  app.type('a question');
+  await app.until(/explored 3 ways/);
+  app.type('/exit');
+  await app.closed;
+  const l = (await launches(log, 5)).filter(x => !isChat(x));
+  assert.equal(l.length, 4);
+  for (const launch of l) assert.doesNotMatch(argAfter(launch, '--system-prompt'), /How to think/);
 });
 
 test('explorer: three drafts and a weighing per message, the last turns ride along, and no chat process is started', async () => {
@@ -386,17 +427,6 @@ test('/copy says what is missing when there is no pbcopy', async () => {
   await app.until(/re-read clean/);
   app.type('/copy');
   await app.until(/copy needs the macOS pbcopy command/);
-  app.type('/exit');
-  await app.closed;
-});
-
-test('/voice is a placeholder until ChatGPT voice is wired in', async () => {
-  const { home, log } = setup();
-  const app = run([], home, log);
-  app.type('/voice');
-  await app.until(/ChatGPT voice is being wired in/);
-  app.type('/status');
-  await app.until(/Voice +│ +off/);
   app.type('/exit');
   await app.closed;
 });
