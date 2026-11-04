@@ -14,7 +14,8 @@ import { setPalette, randomPalette, nextPalette, palette, grad } from '../lib/pa
 import { intro, thinking, brainScreen, menu, secret, promptGlyph, swatch } from '../lib/anim.mjs';
 import { ESC, dim, fancy, fg, heading } from '../lib/style.mjs';
 import { stream } from '../lib/render.mjs';
-import { models, modelLine, findModel } from '../lib/modelmenu.mjs';
+import { models, modelLine, findModel, byMaker, makerLine, nameOf, matching } from '../lib/modelmenu.mjs';
+import { makerOf } from '../lib/makers.mjs';
 import { contextWindow, estimateTokens, usedTokens, hasUsage, breakdown, barCounts, bar, FILL, count, share } from '../lib/context.mjs';
 import { openaiKey, saveOpenaiKey } from '../lib/keys.mjs';
 import { openVoice, NO_KEY } from '../lib/voicechat.mjs';
@@ -368,30 +369,38 @@ function showStatus() {
 // A line of model ids that fits the screen. opencode alone can offer a hundred.
 const someModels = list => list.slice(0, 12).map(m => m.id).join(', ') + (list.length > 12 ? `, and ${list.length - 12} more` : '');
 
-// The picker, or a typed name, over every model Claude, grok and opencode offer. The list is a day
-// old at most, and `/model refresh` asks them again and says which could not be asked. A different
-// model starts a fresh session, because a session belongs to the model that began it. The chat
-// stays on screen. Full access is Claude's alone, so a model from another provider turns it off.
+// The picker, or a typed name, over every model the CLIs and your services offer. It asks for the
+// company first, then the model, so a few hundred models are two short lists. A word that names a
+// family, like gemini, offers that family. The list is a day old at most, and `/model refresh` asks
+// everyone again and says who could not be asked. A different model starts a fresh session,
+// because a session belongs to the model that began it. The chat stays on screen. Full access is
+// Claude's alone, so a model from anywhere else turns it off.
 async function pickModel(arg = '') {
   const again = arg.toLowerCase() === 'refresh';
   const { models: list, errors } = await working(async () => {
-    spinner?.status('asking Claude, grok and opencode what they offer');
+    spinner?.status('asking every AI you can reach what it offers');
     return again ? refreshModels() : { models: await listModels(), errors: {} };
   });
   for (const [who, why] of Object.entries(errors)) note(`${who} could not be asked: ${fit(why.replace(/\s+/g, ' '), width() - 24)}`);
-  if (again) return note(`${list.length} models. /model lists them`);
+  if (again) return note(`${list.length} models from ${byMaker(list).length} companies. /model lists them`);
   let chosen;
   if (arg) {
     chosen = findModel(arg, list);
-    if (!chosen) return note(`no model "${arg}". these are the models: ${someModels(list)}`);
+    const family = chosen ? [] : matching(arg, list);
+    if (!chosen && !family.length) return note(`no model "${arg}". these are the models: ${someModels(list)}`);
+    if (family.length === 1) [chosen] = family;
+    else if (family.length && !fancy(out)) return note(`${family.length} models have "${arg}" in their name: ${someModels(family)}`);
+    else if (family.length && !(chosen = await pickFrom(family))) return note('menu closed');
     if (chosen.id.toLowerCase() !== arg.toLowerCase()) note(`${arg} → ${chosen.id}`);
   } else if (!fancy(out)) {
     return note(`models: ${someModels(list)}. type /model and a name`);
   } else {
+    const groups = byMaker(list);
     out.write('\n');
-    const i = await menu(out, process.stdin, list.map(m => [m.id, modelLine(m, state.model)]), { at: list.findIndex(m => m.id === state.model), nameMax: 40 });
+    const rows = groups.map(g => [g.maker.name, makerLine(g, state.model), g.maker.color]);
+    const i = await menu(out, process.stdin, rows, { at: groups.findIndex(g => g.models.some(m => m.id === state.model)) });
     if (i < 0) return note('menu closed');
-    chosen = list[i];
+    if (!(chosen = await pickFrom(groups[i].models))) return note('menu closed');
   }
   if (chosen.id === state.model) return note(`already on ${chosen.id}`);
   state.model = chosen.id;
@@ -402,6 +411,13 @@ async function pickModel(arg = '') {
     note('full access works with Claude only, so tools are off');
   }
   fresh(`model: ${chosen.id}. fresh chat`);
+}
+
+// One company's models, or a family's, each in its company's colour. Null when it is closed.
+async function pickFrom(list) {
+  out.write('\n');
+  const i = await menu(out, process.stdin, list.map(m => [nameOf(m), modelLine(m, state.model), makerOf(m).color]), { at: list.findIndex(m => m.id === state.model), nameMax: 34 });
+  return i < 0 ? null : list[i];
 }
 
 async function pickThinking(arg) {

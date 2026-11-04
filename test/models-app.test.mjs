@@ -148,7 +148,7 @@ test('/model refresh asks every provider again and says which could not be asked
   const { dir, home, log } = setup();
   const app = run([], home, log, { DYSLEXIC_OPENCODE_BIN: join(dir, 'no-such-opencode') });
   app.type('/model refresh');
-  await app.until(/opencode could not be asked: .*\n[\s\S]*7 models\. \/model lists them/);
+  await app.until(/opencode could not be asked: .*\n[\s\S]*7 models from 2 companies\. \/model lists them/);
   app.type('/exit');
   await app.closed;
 });
