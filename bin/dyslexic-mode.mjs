@@ -244,7 +244,7 @@ async function chat(msg) {
   rememberWindow(r.contextWindow ?? r.usage?.contextWindow);
   const ms = Date.now() - t0;
   append('chats.jsonl', { ts: Date.now(), session: r.sessionId, q: msg.slice(0, 300), text: r.text, rewrites: r.rewrites, hard: r.hard, words: words(r.text), tools: state.tools, model: state.model ?? null, thinking: state.thinking, ms, first });
-  const check = r.hard ? `${r.hard} hard hit left` : r.rewrites ? 'tidied once' : 're-read clean';
+  const check = r.hard ? `${r.hard} hard hit${r.hard === 1 ? '' : 's'} left` : r.rewrites ? 'tidied once' : 're-read clean';
   // Which model wrote it, in its company's colour, since /model can change it at any turn.
   const who = current();
   const tail = `${state.pliny ? `\n  ${DIVIDER}\n` : ''}\n  ${dot(who.maker.color)}` + soft(fit(`${who.name} · ${(ms / 1000).toFixed(1)}s · ${check}${explorer ? ' · explored 3 ways' : ''} · ! if it tripped you`, (out.columns || 80) - 5)) + '\n\n';
