@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { readFileSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 import { MENU } from '../lib/commands.mjs';
 import { LEVEL_NAMES } from '../lib/think.mjs';
 import { NO_KEY } from '../lib/voicechat.mjs';
@@ -40,6 +40,12 @@ test('the services table has a row for every service, with its /key and its vari
   }
 });
 
-test('reading aloud is gone from the docs and from the recording', () => {
-  for (const path of ['README.md', 'media/chat.svg']) assert.doesNotMatch(read(path), /aloud|tab reads|`\/read`/i, path);
+test('reading aloud is gone from the docs', () => {
+  assert.doesNotMatch(README, /aloud|tab reads|`\/read`/i);
+});
+
+test('every picture the README shows is in the repo', () => {
+  const pictures = [...README.matchAll(/<img src="([^"]+)"/g)].map(m => m[1]).filter(src => !/^https?:/.test(src));
+  assert.ok(pictures.length >= 3, pictures.join(', '));
+  for (const src of pictures) assert.ok(existsSync(new URL(`../${src}`, import.meta.url)), src);
 });
