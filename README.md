@@ -117,7 +117,7 @@ Talk instead of typing. Hear the answer, and read it too.
 
 No key yet? `/voice` says:
 
-> ChatGPT voice needs an OpenAI key. Type /key to add it. It is saved in your Mac's Keychain, never in a file.
+> ChatGPT voice needs an OpenAI key. Type /key openai to add it. It is saved in your Mac's Keychain, never in a file.
 
 ## Keys and secrets
 

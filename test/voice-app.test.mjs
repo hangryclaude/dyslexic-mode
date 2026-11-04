@@ -49,8 +49,8 @@ test('with no key, /voice says how to add one in one line and starts nothing', a
   const t = setup();
   const app = run([], t.home, t.log, t.env);
   app.type('/voice');
-  await app.until(/ChatGPT voice needs an OpenAI key\. Type \/key to add it\. It is saved in your Mac's Keychain, never in a file\.\n/);
-  assert.equal(NO_KEY, "ChatGPT voice needs an OpenAI key. Type /key to add it. It is saved in your Mac's Keychain, never in a file.");
+  await app.until(/ChatGPT voice needs an OpenAI key\. Type \/key openai to add it\. It is saved in your Mac's Keychain, never in a file\.\n/);
+  assert.equal(NO_KEY, "ChatGPT voice needs an OpenAI key. Type /key openai to add it. It is saved in your Mac's Keychain, never in a file.");
   app.type('/status');
   await app.until(/Voice +│ +off/);
   app.type('/exit');
@@ -59,13 +59,13 @@ test('with no key, /voice says how to add one in one line and starts nothing', a
   assert.ok(!existsSync(t.mic), 'no microphone was started');
 });
 
-test('/key takes the key without showing it, saves it to the Keychain once, and writes it to no file of ours', async () => {
+test('/key openai takes the key without showing it, saves it to the Keychain once, and writes it to no file of ours', async () => {
   const t = setup();
   const app = run([], t.home, t.log, t.env);
-  app.type('/key');
-  await app.until(/OpenAI key \(hidden\. Enter saves, Esc cancels\): /);
+  app.type('/key openai');
+  await app.until(/OpenAI key from platform\.openai\.com\/api-keys \(hidden\. Enter saves, Esc cancels\): /);
   app.type(KEY);
-  await app.until(/saved in your Mac's Keychain\. \/voice starts ChatGPT voice\n/);
+  await app.until(/saved in your Mac's Keychain\. \/voice starts ChatGPT voice, and \/model has GPT\n/);
   app.type('/exit');
   await app.closed;
   assert.ok(!app.out().includes(KEY), 'the key is never printed');
@@ -75,21 +75,38 @@ test('/key takes the key without showing it, saves it to the Keychain once, and 
   for (const file of filesUnder(t.home)) assert.ok(!readFileSync(file, 'utf8').includes(KEY), file);
 });
 
+test('/key with a service name saves that service\'s key under its own name', async () => {
+  const t = setup();
+  const app = run([], t.home, t.log, t.env);
+  app.type('/key');
+  await app.until(/which service\? type \/key and one of: poe, openrouter, openai, gemini, xai/);
+  app.type('/key open router');
+  await app.until(/OpenRouter key from openrouter\.ai\/keys \(hidden/);
+  app.type(KEY);
+  await app.until(/saved in your Mac's Keychain\. \/model has OpenRouter's models\n/);
+  app.type('/exit');
+  await app.closed;
+  assert.deepEqual(JSON.parse(readFileSync(t.keychain, 'utf8')), { 'dyslexic-mode/openrouter': KEY });
+  assert.ok(!app.out().includes(KEY));
+});
+
 test('/key refuses a key typed after the command, an empty line and something that is not a key, and saves nothing', async () => {
   const t = setup();
   const app = run([], t.home, t.log, t.env);
   app.type(`/key ${KEY}`);
-  await app.until(/type \/key alone\. it asks for the key with the letters hidden, so the key never shows on the screen/);
-  app.type('/key');
-  await app.until(/OpenAI key \(hidden/);
+  await app.until(/type \/key and a service, like \/key poe\. it asks for the key with the letters hidden, so the key never shows on the screen/);
+  app.type('/key nowhere');
+  await app.until(/no service "nowhere"\. these take a key: poe, openrouter/);
+  app.type('/key openai');
+  await app.until(/OpenAI key from [^ ]+ \(hidden/);
   app.type('');
   await app.until(/no key saved/);
-  app.type('/key');
-  await app.until(/(OpenAI key \(hidden[\s\S]*){2}/);
+  app.type('/key openai');
+  await app.until(/(OpenAI key from [^ ]+ \(hidden[\s\S]*){2}/);
   app.type('too short');
   await app.until(/that does not look like an OpenAI key, so nothing was saved\. a key is one long word/);
-  app.type('/key');
-  await app.until(/(OpenAI key \(hidden[\s\S]*){3}/);
+  app.type('/key openai');
+  await app.until(/(OpenAI key from [^ ]+ \(hidden[\s\S]*){3}/);
   app.type(`${KEY} and more words after it`);
   await app.until(/(does not look like an OpenAI key[\s\S]*){2}/);
   app.type('/exit');
@@ -101,10 +118,10 @@ test('/key refuses a key typed after the command, an empty line and something th
 test('/key says when a key in the environment will be used before the one it saved', async () => {
   const t = setup();
   const app = run([], t.home, t.log, { ...t.env, OPENAI_API_KEY: 'FAKE-ENV-KEY-0123456' });
-  app.type('/key');
-  await app.until(/OpenAI key \(hidden/);
+  app.type('/key openai');
+  await app.until(/OpenAI key from [^ ]+ \(hidden/);
   app.type(KEY);
-  await app.until(/saved in your Mac's Keychain\. \/voice starts ChatGPT voice\. OPENAI_API_KEY is set in this shell and is used first/);
+  await app.until(/saved in your Mac's Keychain\. \/voice starts ChatGPT voice, and \/model has GPT\. OPENAI_API_KEY is set in this shell and is used first/);
   app.type('/exit');
   await app.closed;
 });

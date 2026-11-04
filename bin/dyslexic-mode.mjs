@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 import { createInterface } from 'node:readline';
 import { ask, toolLine } from '../lib/claude.mjs';
-import { askFor, canonicalModel, learnContextWindow, listModels, openSessionFor, providerOf, refreshModels } from '../lib/models.mjs';
+import { askFor, canonicalModel, learnContextWindow, listModels, markStale, openSessionFor, providerOf, refreshModels } from '../lib/models.mjs';
 import { reply } from '../lib/filter.mjs';
 import { systemPrompt } from '../lib/prompt.mjs';
 import { leet, DIVIDER } from '../lib/pliny.mjs';
@@ -16,8 +16,9 @@ import { ESC, dim, fancy, fg, heading } from '../lib/style.mjs';
 import { stream } from '../lib/render.mjs';
 import { models, modelLine, findModel, byMaker, makerLine, nameOf, matching } from '../lib/modelmenu.mjs';
 import { makerOf } from '../lib/makers.mjs';
+import { SERVICES, findService } from '../lib/providers/services.mjs';
 import { contextWindow, estimateTokens, usedTokens, hasUsage, breakdown, barCounts, bar, FILL, count, share } from '../lib/context.mjs';
-import { openaiKey, saveOpenaiKey } from '../lib/keys.mjs';
+import { openaiKey, keyFor, saveKey } from '../lib/keys.mjs';
 import { openVoice, NO_KEY } from '../lib/voicechat.mjs';
 import { LEVELS, LEVEL_NAMES, promptThinking, withHistory, exploreTurn } from '../lib/think.mjs';
 import { COMPACT_ASK, carryPrompt } from '../lib/compact.mjs';
@@ -397,9 +398,10 @@ async function pickModel(arg = '') {
   } else {
     const groups = byMaker(list);
     out.write('\n');
-    const rows = groups.map(g => [g.maker.name, makerLine(g, state.model), g.maker.color]);
+    const rows = [...groups.map(g => [g.maker.name, makerLine(g, state.model), g.maker.color]), ['+ more AIs', 'add a key for Poe, OpenRouter, Gemini, Groq…']];
     const i = await menu(out, process.stdin, rows, { at: groups.findIndex(g => g.models.some(m => m.id === state.model)) });
     if (i < 0) return note('menu closed');
+    if (i === groups.length) return setKey('');
     if (!(chosen = await pickFrom(groups[i].models))) return note('menu closed');
   }
   if (chosen.id === state.model) return note(`already on ${chosen.id}`);
@@ -569,16 +571,36 @@ function voiceChat() {
 // Reads a line with the letters hidden on a terminal. A pipe shows nothing anyway.
 const readSecret = q => (process.stdin.isTTY ? secret(out, process.stdin, soft(q)) : nextLine(q));
 
-// The key is asked for with the letters hidden, so it never shows on the screen or in the
-// scroll-back, and it goes straight to the Keychain. It is never written to a file of ours, and
-// typing it after the command would put it on screen, so that is refused.
+// A key for any service. It is asked for with the letters hidden, so it never shows on the screen
+// or in the scroll-back, and it goes straight to the Keychain, never to a file of ours. A key typed
+// after the command would be on screen, so a long word that names no service is refused.
 async function setKey(arg) {
-  if (arg) return note('type /key alone. it asks for the key with the letters hidden, so the key never shows on the screen');
-  const typed = ((await readSecret('  OpenAI key (hidden. Enter saves, Esc cancels): ')) ?? '').trim();
+  const keyed = SERVICES.filter(s => !s.local);
+  let service;
+  if (arg) {
+    service = findService(arg, keyed);
+    if (!service) {
+      return note(/^\S{20,}$/.test(arg)
+        ? 'type /key and a service, like /key poe. it asks for the key with the letters hidden, so the key never shows on the screen'
+        : `no service "${arg}". these take a key: ${keyed.map(s => s.id).join(', ')}`);
+    }
+  } else if (!fancy(out)) {
+    return note(`which service? type /key and one of: ${keyed.map(s => s.id).join(', ')}`);
+  } else {
+    out.write('\n');
+    const i = await menu(out, process.stdin, keyed.map(s => [s.name, `${s.note}${keyFor(s) ? ' · connected' : ''}`]));
+    if (i < 0) return note('menu closed');
+    service = keyed[i];
+  }
+  const a = /^[aeiox]/i.test(service.name) ? 'an' : 'a';
+  const typed = ((await readSecret(`  ${service.name} key from ${service.site} (hidden. Enter saves, Esc cancels): `)) ?? '').trim();
   if (!typed) return note('no key saved');
-  if (/\s/.test(typed) || typed.length < 20) return note('that does not look like an OpenAI key, so nothing was saved. a key is one long word');
-  saveOpenaiKey(typed);
-  note(`saved in your Mac's Keychain. /voice starts ChatGPT voice${process.env.OPENAI_API_KEY?.trim() ? '. OPENAI_API_KEY is set in this shell and is used first' : ''}`);
+  if (/\s/.test(typed) || typed.length < 20) return note(`that does not look like ${a} ${service.name} key, so nothing was saved. a key is one long word`);
+  saveKey(service.id, typed);
+  // Its models join the list on the next /model.
+  markStale();
+  const what = service.id === 'openai' ? '/voice starts ChatGPT voice, and /model has GPT' : `/model has ${service.name}'s models`;
+  note(`saved in your Mac's Keychain. ${what}${process.env[service.env]?.trim() ? `. ${service.env} is set in this shell and is used first` : ''}`);
 }
 
 const commands = {

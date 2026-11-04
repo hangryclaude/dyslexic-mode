@@ -20,7 +20,7 @@ function rig(extra = {}) {
 }
 
 test('the missing-key line is the one the user was promised', () => {
-  assert.equal(NO_KEY, "ChatGPT voice needs an OpenAI key. Type /key to add it. It is saved in your Mac's Keychain, never in a file.");
+  assert.equal(NO_KEY, "ChatGPT voice needs an OpenAI key. Type /key openai to add it. It is saved in your Mac's Keychain, never in a file.");
 });
 
 test('the key and any other option go on to startVoice, and what it returns comes back', () => {
