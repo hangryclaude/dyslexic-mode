@@ -49,6 +49,33 @@ const CAPS_WORDS = new Set(['STOP', 'NOW', 'NOT', 'NEVER', 'ALWAYS', 'ONLY', 'DO
 // s2: BDA says explain jargon on first use (weak-moderate). Small list on purpose.
 const JARGON = new Set(T.jargon.words);
 const LOOK_ALIKES = T.look_alike_pairs.pairs;
+// Reply shape: the answer is line 1 in one short sentence, and a bullet is one short idea
+// (s1, s4: weak, style defaults). Rules that name "a reply" are skipped for documents.
+const FIRST_SOFT = T.first_line_words.soft;
+const FIRST_HARD = T.first_line_words.hard;
+const BULLET_SOFT = T.bullet_words.soft;
+const BULLET_HARD = T.bullet_words.hard;
+const QUESTIONS_MAX = T.questions_per_reply.max;
+// s3: bold keeps letter shapes. A short label that starts a bullet is free; other bold counts.
+const BOLD_SOFT = T.bold_per_reply.soft;
+const BOLD_HARD = T.bold_per_reply.hard;
+const LABEL_WORDS = T.bold_per_reply.label_words;
+const REPEAT_SOFT = T.repeated_label.soft;
+const REPEAT_HARD = T.repeated_label.hard;
+// s6: study-plan numbers are conventions (time boxes, breaks), not trial results.
+const FIRST_STEP_SOFT = T.first_step_minutes.soft;
+const FIRST_STEP_HARD = T.first_step_minutes.hard;
+const STEP_MAX = T.step_minutes.hard;
+const BREAK_SOFT = T.steps_per_break.soft;
+const BREAK_HARD = T.steps_per_break.hard;
+// Opening pleasantries push the answer out of line 1.
+const FILLER = /^(?:sure|certainly|of course|absolutely|great question|good question|happy to help|i'd be happy|i would be happy|no problem|glad you asked)\b/i;
+const STEP_RE = /^\s*\d+[.)]\s+/;
+const BOX_RE = /^\s*(?:[-*+]|\d+[.)])\s+\[[ xX]?\]/;
+const wordRe = (words) => new RegExp(`\\b(?:${words.map((w) => w.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')).join('|')})\\b`, 'i');
+const PLAN_WORDS = wordRe(T.plan_triggers.words);
+const PLAN_WEAK_WORDS = wordRe(T.plan_triggers.weak_words);
+const DEADLINE_CUE = /\b(?:by|before|until|due|on|this|next)\s+(?:mon|tues|wednes|thurs|fri|satur|sun)day\b|\b(?:tomorrow|tonight)\b|\bnext (?:week|month)\b|\b(?:in|within)\s+\d+\s+(?:day|week|hour)s?\b|\bdue\b/i;
 // A number right after one of these is a label, not a figure.
 const NUMBER_LABELS = new Set(['item', 'step', 'phase', 'line', 'port', 'version', 'section', 'number',
   'no', 'page', 'pass', 'rule', 'unit', 'lesson', 'part', 'chapter', 'v']);
@@ -105,6 +132,8 @@ function maskLine(raw) {
   t = t.replace(/(?<![\w])(?:~\/|\.{1,2}\/|\/)[^\s)\]]+/g, blankKeep);
   t = t.replace(/[\w.-]+(?:\/[\w.-]+){2,}|[\w-]+\/[\w-]*\.\w+/g, blankKeep);
   t = t.replace(/^\s*#{1,6}\s/, blank).replace(/^\s*([-*+]|\d+[.)])\s+/, blank);
+  // A task box is not a word.
+  if (type === 'list') t = t.replace(/^\s*\[[ xX]?\]/, blank);
   t = t.replace(/[*]/g, ' ').replace(/(?<![\w])_|_(?![\w])/g, ' ');
   return { type, text: t };
 }
@@ -189,13 +218,140 @@ const isNumberToken = (tok) => {
   return /^\d[\d,._]*(%|[a-zA-Z]{1,3})?$/.test(t);
 };
 
-export function analyze(source) {
+const wordCount = (s) => [...s.matchAll(/\S+/g)].filter((m) => /[A-Za-z0-9]/.test(m[0])).length;
+
+// True when the user's message should get a study plan, not an explanation. The weak words
+// ("test", "project") also name code, so they need a deadline cue.
+export function wantsPlan(message) {
+  return PLAN_WORDS.test(message) || (PLAN_WEAK_WORDS.test(message) && DEADLINE_CUE.test(message));
+}
+
+// Minutes in a step's time box, like "(20 min)", "1 hr" or "10-15 minutes". A range counts
+// at its top end.
+export function timeBox(text) {
+  const m = text.match(/(\d+(?:\.\d+)?)(?:\s*(?:-|–|to)\s*(\d+(?:\.\d+)?))?\s*(h(?:ou)?rs?|min(?:ute)?s?)\b/i);
+  if (!m) return null;
+  return Number(m[2] ?? m[1]) * (/^h/i.test(m[3]) ? 60 : 1);
+}
+
+// The reply proper starts after any front matter and after a leading `thinking` block. A model
+// with no private thinking writes its thinking there (see lib/prompt.mjs); it is not the reply.
+function replyStart(lines) {
+  let i = lines[0]?.trim() === '---' ? lines.findIndex((l, k) => k > 0 && /^(---|\.\.\.)\s*$/.test(l)) + 1 : 0;
+  while (i < lines.length && !lines[i].trim()) i++;
+  if (!/^\s*(?:```|~~~)\s*thinking\b/i.test(lines[i] ?? '')) return i;
+  const fence = lines[i].trim().slice(0, 3);
+  let j = i + 1;
+  while (j < lines.length && !lines[j].trim().startsWith(fence)) j++;
+  return j + 1;
+}
+
+// Line 1 must be the answer: one short plain sentence, not a heading, a list, a table or filler.
+function checkFirstLine(lines, info, start, add) {
+  let f = start;
+  while (f < lines.length && info[f].type === 'blank') f++;
+  if (f >= lines.length) return;
+  const { type } = info[f];
+  if (type === 'heading' || type === 'list' || type === 'table') {
+    add(f + 1, 1, 'first-line', 'hard', `line 1 is a ${type}, not the answer`, 'open with the answer in one short sentence');
+    return;
+  }
+  if (type === 'code') {
+    add(f + 1, 1, 'first-line', 'soft', 'line 1 is code, not the answer', 'say the answer in one short sentence, then show the code');
+    return;
+  }
+  // A sentence that wraps onto line 2 still counts as the first line.
+  let end = f;
+  while (end + 1 < lines.length && info[end + 1].type === 'prose') end++;
+  const block = info.slice(f, end + 1).map((l) => l.text).join('\n');
+  const [first] = splitSentences(block);
+  const n = Math.max(wordCount(info[f].text), first ? wordCount(block.slice(first.start, first.end)) : 0);
+  if (n > FIRST_HARD) add(f + 1, 1, 'first-line', 'hard', `${n} words (max ${FIRST_HARD})`, 'open with the answer in one short sentence, then give detail below');
+  else if (n > FIRST_SOFT) add(f + 1, 1, 'first-line', 'soft', `${n} words (aim for ${FIRST_SOFT} or fewer)`, 'cut line 1 to the answer alone');
+  if (FILLER.test(lines[f].trim())) add(f + 1, 1, 'first-line', 'soft', 'opens with filler, not the answer', 'start with the answer itself');
+}
+
+// Bold spans, split into short bullet labels and the rest. Code is skipped, and `**` inside it
+// is not emphasis. Bold in a table is a header or a row name, so it is skipped too.
+function boldSpans(lines, info) {
+  const loose = [], labels = [];
+  lines.forEach((raw, i) => {
+    if (['code', 'table', 'tablesep'].includes(info[i].type)) return;
+    const t = raw.replace(/`[^`]*`/g, blank);
+    for (const m of t.matchAll(/\*\*([^*\n]+)\*\*/g)) {
+      const label = /^\s*(?:[-*+]|\d+[.)])\s+$/.test(t.slice(0, m.index)) && wordCount(m[1]) <= LABEL_WORDS;
+      (label ? labels : loose).push({ line: i + 1, col: m.index + 1, name: m[1].trim().replace(/[:.]+$/, '').toLowerCase() });
+    }
+  });
+  return { loose, labels };
+}
+
+// A study plan: a goal line, numbered steps with time boxes, a break after every 2, a checklist.
+// With `force` the reply must be one. Without it, the checks run only on a reply that carries
+// a plan's marks: time-boxed steps plus a goal line or task boxes. A recipe has timed steps too,
+// and "bake for 45 minutes" must not read as a plan with a step that is too long.
+function checkPlan({ lines, info, blocks, questions, start, force }, add) {
+  if (!lines.some((l) => l.trim())) return;
+  const steps = blocks
+    .filter((b) => b.kind === 'list' && info[b.lines[0]].indent < 2 && STEP_RE.test(lines[b.lines[0]]))
+    .map((b) => {
+      const text = b.lines.map((i) => lines[i]).join(' ');
+      // A break step is short, so a long step that merely mentions a break is still work.
+      return { line: b.lines[0] + 1, box: timeBox(text), pause: /\bbreak\b/i.test(text) && wordCount(text) <= 8 };
+    });
+  const boxes = lines.filter((l, i) => info[i].type === 'list' && BOX_RE.test(l)).length;
+  let g = start;
+  while (g < lines.length && info[g].type === 'blank') g++;
+  const goal = /\bgoal\b/i.test(lines[g] ?? '');
+  if (!force && !(steps.filter((s) => s.box != null).length >= 2 && (boxes || goal))) return;
+
+  if (force && steps.length < 2) {
+    add(g + 1, 1, 'plan-missing', 'hard', 'this message needs a study plan, but the reply has no numbered steps',
+      'write a goal line, numbered steps with time boxes, and a [ ] checklist');
+  }
+  if (!goal) add(g + 1, 1, 'plan-goal', 'soft', 'line 1 is not a goal line', 'start with "Goal:" and one sentence');
+
+  // Not asking is part of the rule: guess the deadline or the amount and say so.
+  const ask = questions.find((q) => !steps.length || q.line < steps[0].line);
+  if (ask) add(ask.line, ask.col, 'plan-asks-first', 'soft', 'asks a question before the plan', 'guess a sensible answer, say it in one line, and give the plan');
+
+  const work = steps.filter((s) => !s.pause);
+  const head = steps[0];
+  if (head && !head.pause && head.box != null) {
+    if (head.box > FIRST_STEP_HARD) add(head.line, 1, 'plan-first-step', 'hard', `first step is ${head.box} minutes (max ${FIRST_STEP_HARD})`, 'make step 1 a tiny start that takes under 2 minutes');
+    else if (head.box > FIRST_STEP_SOFT) add(head.line, 1, 'plan-first-step', 'soft', `first step is ${head.box} minutes (aim for ${FIRST_STEP_SOFT} or fewer)`, 'make step 1 a tiny start that takes under 2 minutes');
+  }
+  for (const s of work) {
+    if (s.box > STEP_MAX) add(s.line, 1, 'plan-time-box', 'hard', `${s.box} minutes (max ${STEP_MAX})`, `split it into steps of ${STEP_MAX} minutes or less, with a break between`);
+  }
+  const bare = work.filter((s) => s.box == null);
+  if (bare.length) add(bare[0].line, 1, 'plan-time-box', 'soft', `${bare.length} of ${work.length} steps have no time box`, 'add a time box like "(20 min)" to every step');
+
+  // A break can be a step or a loose line between steps.
+  const stepLines = new Set(steps.map((s) => s.line));
+  const stops = blocks.filter((b) => !stepLines.has(b.lines[0] + 1) && /\bbreak\b/i.test(b.lines.map((i) => lines[i]).join(' '))).map((b) => b.lines[0] + 1);
+  let run = 0, prev = 0;
+  for (const s of steps) {
+    if (s.pause || stops.some((l) => l > prev && l < s.line)) run = 0;
+    prev = s.line;
+    if (s.pause) continue;
+    run++;
+    if (run === BREAK_SOFT + 1 || run === BREAK_HARD + 1) {
+      add(s.line, 1, 'plan-break', run > BREAK_HARD ? 'hard' : 'soft', `${run} steps in a row with no break`, `put a short break step after every ${BREAK_SOFT} steps`);
+    }
+  }
+
+  if (!boxes) add(lines.findLastIndex((l) => l.trim()) + 1, 1, 'plan-checklist', 'soft', 'no checklist with [ ] boxes', 'end with one "- [ ]" line per step');
+}
+
+export function analyze(source, { reply = true, plan = 'auto' } = {}) {
   const lines = source.replace(/\r\n?/g, '\n').split('\n');
   const { info, tables } = classifyAll(lines);
 
   const findings = [];
   const add = (line, col, rule, severity, message, suggestion) =>
     findings.push({ line, col, rule, severity, message, suggestion });
+  const questions = [];
 
   // Build blocks of consecutive lines. Prose joins prose; a list item opens a block and
   // swallows indented continuation lines; table rows form one block.
@@ -237,11 +393,22 @@ export function analyze(source) {
     };
 
     const sentences = splitSentences(text);
+
+    // A bullet is one idea, so the whole item (with its wrapped lines) is short.
+    if (b.kind === 'list') {
+      const n = wordCount(text);
+      const [l, c] = pos(Math.max(0, text.search(/\S/)));
+      if (n > BULLET_HARD) add(l, c, 'long-bullet', 'hard', `${n} words (max ${BULLET_HARD})`, 'one idea per bullet: cut it, or split it into two bullets');
+      else if (n > BULLET_SOFT) add(l, c, 'long-bullet', 'soft', `${n} words (aim for ${BULLET_SOFT} or fewer)`, 'one idea per bullet: cut it, or split it');
+    }
+
     for (const s of sentences) {
       const st = text.slice(s.start, s.end);
       const toks = [...st.matchAll(/\S+/g)].filter((m) => /[A-Za-z0-9]/.test(m[0]));
       const n = toks.length;
       const [sl, sc] = pos(s.start);
+      // Questions in a list are content (a quiz), so only prose counts as asking.
+      if (b.kind === 'prose' && /\?[.!?]*$/.test(st)) questions.push({ line: sl, col: sc });
 
       if (n > SENTENCE_HARD) {
         add(sl, sc, 'long-sentence', 'hard', `${n} words (max ${SENTENCE_HARD})`, 'split into two or three short sentences');
@@ -396,6 +563,42 @@ export function analyze(source) {
     }
   });
 
+  // Rules about the shape of a reply. A document (a page, SKILL.md) has its own title and headings.
+  const start = replyStart(lines);
+  if (reply) {
+    checkFirstLine(lines, info, start, add);
+
+    const body = info.slice(start).filter((l) => l.type !== 'blank');
+    const heading = info.findIndex((l, i) => i >= start && l.type === 'heading');
+    if (heading >= 0 && body.length <= HEADING_AFTER_LINES) {
+      add(heading + 1, 1, 'early-heading', 'soft', `heading in a ${body.length}-line reply (headings start past ${HEADING_AFTER_LINES} lines)`, 'drop the heading and let line 1 lead');
+    }
+
+    if (questions.length > QUESTIONS_MAX) {
+      const q = questions[QUESTIONS_MAX];
+      add(q.line, q.col, 'many-questions', 'soft', `${questions.length} questions (aim for ${QUESTIONS_MAX} at most, at the end)`, 'keep the one that matters most');
+    }
+
+    const { loose, labels } = boldSpans(lines, info);
+    if (loose.length > BOLD_SOFT) {
+      const over = loose[BOLD_SOFT];
+      add(over.line, over.col, 'too-much-bold', loose.length > BOLD_HARD ? 'hard' : 'soft', `${loose.length} bold phrases outside bullet labels (aim for ${BOLD_SOFT} or fewer)`, 'keep one key phrase bold, or use short bullet labels');
+    }
+
+    // One label over and over is a table written as bullets. Two labels that both repeat make a
+    // grid (RAM, RAM, Storage, Storage), so that is hard even at two uses each.
+    const uses = new Map();
+    for (const l of labels) uses.set(l.name, [...(uses.get(l.name) ?? []), l]);
+    const repeated = [...uses].filter(([, at]) => at.length > REPEAT_SOFT);
+    for (const [name, at] of repeated) {
+      add(at[REPEAT_SOFT].line, at[REPEAT_SOFT].col, 'repeated-label', at.length > REPEAT_HARD || repeated.length > 1 ? 'hard' : 'soft',
+        `"${name}" starts ${at.length} bullets${repeated.length > 1 ? ', like a grid' : ''}`, 'put the rows in a table, or nest the bullets under one label');
+    }
+  }
+  if (plan === true || (reply && plan !== false)) {
+    checkPlan({ lines, info, blocks, questions, start, force: plan === true }, add);
+  }
+
   findings.sort((a, b) => a.line - b.line || a.col - b.col);
   const hard = findings.filter((f) => f.severity === 'hard').length;
   return { findings, summary: { total: findings.length, hard, soft: findings.length - hard } };
@@ -411,7 +614,8 @@ function main(argv) {
     process.stderr.write(`reread: cannot read ${file ?? 'stdin'}: ${e.code ?? e.message}\n`);
     return 2;
   }
-  const r = analyze(src);
+  // --doc: a page or doc, which has a title and headings. --plan: the message asked for a study plan.
+  const r = analyze(src, { reply: !argv.includes('--doc'), plan: argv.includes('--plan') ? true : 'auto' });
   if (json) {
     process.stdout.write(JSON.stringify(r, null, 2) + '\n');
   } else {

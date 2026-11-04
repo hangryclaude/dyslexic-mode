@@ -5,7 +5,8 @@ The build server (CI) has not run them yet.
 
 A race condition in the test setup.
 The setup did not wait for the database migration.
-It ran the first test too early.
+
+So the setup ran the first test too early.
 
 The failures came and went.
 They began when vitest went to 3.2.4 on Tuesday.
@@ -20,7 +21,7 @@ tests/setup/db.ts
 
 - Added `await` on line 42.
 - Raised the test timeout from 5000 ms to 15000 ms.
-  Build server runners look slower than my machine.
+  - Build server runners look slower than my machine.
 
 ## Results
 
