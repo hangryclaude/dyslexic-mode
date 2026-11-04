@@ -26,12 +26,16 @@ tmux('new-session', '-d', '-s', name, '-x', String(cols), '-y', String(rows), `e
 tmux('set-option', '-g', 'status', 'off');
 const shots = [];
 let clock = 0;
+// Each key goes in at its own time, even inside one long wait: a menu has to be open before the
+// key that picks from it arrives.
 const advance = ms => {
   const until = clock + ms;
-  for (const k of keys) if (k.at > clock && k.at <= until) {
+  for (const k of keys.filter(k => k.at > clock && k.at <= until).sort((a, b) => a.at - b.at)) {
+    sleep(k.at - clock);
+    clock = k.at;
     for (const part of k.text.split(/(\n)/)) if (part) tmux('send-keys', '-t', name, ...(part === '\n' ? ['Enter'] : ['-l', part]));
   }
-  sleep(ms);
+  sleep(until - clock);
   clock = until;
 };
 advance(wait);
