@@ -1,4 +1,6 @@
-<h1 align="center">dyslexic mode</h1>
+<p align="center">
+  <img src="media/hero.png" alt="dyslexic mode: a 3D brain drawn in coloured text next to the words DYSLEXIC MODE, then 'turn your agent dyslexic' and the AIs it works with" width="780">
+</p>
 
 <p align="center">
   <b>Turn your agent dyslexic.</b><br>
@@ -392,11 +394,13 @@ A name that won't fit whole is left out, so no name is ever cut.
 
 Just the brain: `npm run brain`. Any key quits.
 
-The pictures in this file are real recordings of the app:
+The screens in this file are real recordings of the app:
 
 - `tools/capture.mjs` records the chat from tmux. No recorder needed.
 - `tools/reel.mjs` draws the brain one frame at a time, so it loops without a seam.
   `node tools/reel.mjs brain.mp4` makes a square video for posting.
+- The banner at the top is the intro's last frame, as a PNG.
+  `node tools/hero.mjs` draws it. It needs Google Chrome.
 
 The smooth WebPs and the MP4 need `brew install librsvg webp ffmpeg`.
 The app itself needs none of them.
