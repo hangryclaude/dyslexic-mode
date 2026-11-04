@@ -1,4 +1,6 @@
-<h1 align="center">dyslexic mode</h1>
+<p align="center">
+  <img src="media/hero.png" alt="dyslexic mode: a 3D brain drawn in coloured text next to the words DYSLEXIC MODE, then 'turn your agent dyslexic' and the AIs it works with" width="780">
+</p>
 
 <p align="center">
   <b>Turn your agent dyslexic.</b><br>
@@ -388,8 +390,10 @@ It spins in the intro.
 
 Just the brain: `npm run brain`. Any key quits.
 
-The two pictures in this file are real recordings of the app.
+The screens in this file are real recordings of the app.
 `tools/capture.mjs` makes them from tmux. No recorder needed.
+The banner at the top is the intro's last frame, as a PNG.
+`node tools/hero.mjs` draws it. It needs Google Chrome.
 
 ## Test
 
