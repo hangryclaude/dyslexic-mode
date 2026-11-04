@@ -84,7 +84,8 @@ const system = (tools = state.tools, level = state.thinking) => systemPrompt({ p
 // to whichever provider the model's id names: Claude, grok or opencode.
 const open = opts => openSessionFor(state.model, { system: system(), tools: state.tools, ...opts });
 const side = (prompt, opts) => askFor(state.model, prompt, opts);
-const chatSession = () => (session ??= open({ resume: state.sessionId }));
+// A service keeps no chat of its own, so it gets the chat so far. The CLIs keep theirs.
+const chatSession = () => (session ??= open({ resume: state.sessionId, history: state.history }));
 const dropSession = () => { session?.close(); session = null; };
 // Explorer sends every message as one-shot calls, so it has no chat process to start.
 const warm = () => { if (state.thinking !== 'explorer') chatSession().warm(); };
