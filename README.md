@@ -12,7 +12,7 @@
 </p>
 
 <p align="center">
-  <img src="media/chat.svg" alt="dyslexic mode: the start screen with every AI it can reach, a question, and GPT-5's reply in short lines with bold labels" width="780">
+  <img src="media/chat.webp" alt="dyslexic mode: the start screen with every AI it can reach, a question typed in, and GPT-5's reply in short lines with bold labels" width="780">
 </p>
 
 - `/think` changes how the model thinks, before it writes a word.
@@ -200,7 +200,7 @@ Two commands that start the same way, like `/co`, are never guessed.
 | `/stats` | shows the numbers |
 | `/profile` | shows the rules it learned from your flags |
 | `/color` | switches to the next color set |
-| `/brain` | shows a big spinning 3D brain |
+| `/brain` | a big spinning 3D brain, written in every model's name |
 | `/calm` | turns motion off |
 | `/pliny` | l33t replies with dividers |
 | `/voice` | talks with ChatGPT voice, on or off |
@@ -381,19 +381,29 @@ Every number: [bench/results/tiles.md](bench/results/tiles.md).
 ## The brain
 
 <p align="center">
-  <img src="media/brain.svg" alt="a 3D brain drawn in colored text, spinning" width="560">
+  <img src="media/brain.webp" alt="a 3D brain written in the names of 248 AI models, each in its company's color, turning" width="678">
 </p>
 
 The brain is ray-marched in 3D for every terminal cell.
-Each lobe gets its own color, like an anatomy chart.
-It spins in the intro.
+In the intro, each lobe gets its own color, like an anatomy chart.
+
+`/brain` writes it in the name of every model you can reach.
+Each name is in its company's color and turns with the brain.
+Names facing you are brightest.
+A name that won't fit whole is left out, so no name is ever cut.
 
 Just the brain: `npm run brain`. Any key quits.
 
-The screens in this file are real recordings of the app.
-`tools/capture.mjs` makes them from tmux. No recorder needed.
-The banner at the top is the intro's last frame, as a PNG.
-`node tools/hero.mjs` draws it. It needs Google Chrome.
+The screens in this file are real recordings of the app:
+
+- `tools/capture.mjs` records the chat from tmux. No recorder needed.
+- `tools/reel.mjs` draws the brain one frame at a time, so it loops without a seam.
+  `node tools/reel.mjs brain.mp4` makes a square video for posting.
+- The banner at the top is the intro's last frame, as a PNG.
+  `node tools/hero.mjs` draws it. It needs Google Chrome.
+
+The smooth WebPs and the MP4 need `brew install librsvg webp ffmpeg`.
+The app itself needs none of them.
 
 ## Test
 
